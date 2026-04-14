@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import "./ChatAgent.css";
+import "./ChatAgent.less";
 
 const API_URL = "http://localhost:3001";
 
@@ -10,6 +10,8 @@ function ChatAgent() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [models, setModels] = useState([]);
   const [currentModel, setCurrentModel] = useState("doubao");
+  const [balances, setBalances] = useState({});
+  const [lastUsage, setLastUsage] = useState(null);
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -26,6 +28,31 @@ function ChatAgent() {
       }
     };
     loadModels();
+  }, []);
+
+  // 加载余额信息（供其他地方调用）
+  const loadBalances = async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/balance`);
+      const data = await res.json();
+      setBalances(data.balances);
+    } catch {
+      console.error("加载余额失败");
+    }
+  };
+
+  // 初始化加载余额
+  useEffect(() => {
+    const initBalances = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/balance`);
+        const data = await res.json();
+        setBalances(data.balances);
+      } catch {
+        console.error("加载余额失败");
+      }
+    };
+    initBalances();
   }, []);
 
   // 自动滚动到底部
@@ -164,6 +191,11 @@ function ChatAgent() {
                   }
                   return updated;
                 });
+              } else if (data.type === "usage") {
+                // 更新 token 使用量
+                setLastUsage(data.usage);
+                // 刷新余额
+                loadBalances();
               }
             } catch {
               // JSON 解析失败，忽略
@@ -222,6 +254,37 @@ function ChatAgent() {
         <div className="header-logo">🤖</div>
         <h1 className="header-title">AI Agent 助手</h1>
         <div className="header-status">
+          {/* 余额展示 */}
+          <div className="balance-display">
+            {balances[currentModel] && (
+              <div className="balance-item active">
+                <span className="balance-label">
+                  {models.find((m) => m.key === currentModel)?.name ||
+                    currentModel}
+                  :
+                </span>
+                <span
+                  className={`balance-value ${balances[currentModel].available ? "" : "unavailable"}`}
+                >
+                  {balances[currentModel].available ? (
+                    <>
+                      {balances[currentModel].balance}
+                      {balances[currentModel].currency && (
+                        <span className="balance-currency">
+                          {" "}
+                          {balances[currentModel].currency}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="balance-message">
+                      {balances[currentModel].message || "不可用"}
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="model-selector">
             <label>模型：</label>
             <select
@@ -247,6 +310,18 @@ function ChatAgent() {
           </div>
         </div>
       </header>
+
+      {/* Token 使用量显示 */}
+      {lastUsage && (
+        <div className="usage-bar">
+          <span>📊 本次消耗: </span>
+          <span>输入 {lastUsage.promptTokens} tokens</span>
+          <span className="usage-divider">|</span>
+          <span>输出 {lastUsage.completionTokens} tokens</span>
+          <span className="usage-divider">|</span>
+          <span className="usage-total">共 {lastUsage.totalTokens} tokens</span>
+        </div>
+      )}
 
       {/* 功能标签 */}
       <div className="features">

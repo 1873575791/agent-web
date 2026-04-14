@@ -1,18 +1,30 @@
+// App 组件样式
+
+// 变量定义
+@accent: #6366f1;
+@accent-bg: rgba(99, 102, 241, 0.1);
+@accent-border: rgba(99, 102, 241, 0.5);
+@border: #334155;
+@text-h: #f1f5f9;
+@social-bg: rgba(99, 102, 241, 0.1);
+@shadow: 0 4px 20px rgba(99, 102, 241, 0.3);
+
 .counter {
   font-size: 16px;
   padding: 5px 10px;
   border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
+  color: @accent;
+  background: @accent-bg;
   border: 2px solid transparent;
   transition: border-color 0.3s;
   margin-bottom: 24px;
 
   &:hover {
-    border-color: var(--accent-border);
+    border-color: @accent-border;
   }
+
   &:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid @accent;
     outline-offset: 2px;
   }
 }
@@ -72,12 +84,13 @@
 
 #next-steps {
   display: flex;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid @border;
   text-align: left;
 
   & > div {
     flex: 1 1 0;
     padding: 32px;
+
     @media (max-width: 1024px) {
       padding: 24px 20px;
     }
@@ -96,11 +109,11 @@
 }
 
 #docs {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid @border;
 
   @media (max-width: 1024px) {
     border-right: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid @border;
   }
 }
 
@@ -116,10 +129,10 @@
   }
 
   a {
-    color: var(--text-h);
+    color: @text-h;
     font-size: 16px;
     border-radius: 6px;
-    background: var(--social-bg);
+    background: @social-bg;
     display: flex;
     padding: 6px 12px;
     align-items: center;
@@ -128,8 +141,9 @@
     transition: box-shadow 0.3s;
 
     &:hover {
-      box-shadow: var(--shadow);
+      box-shadow: @shadow;
     }
+
     .button-icon {
       height: 18px;
       width: 18px;
@@ -155,7 +169,8 @@
 
 #spacer {
   height: 88px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid @border;
+
   @media (max-width: 1024px) {
     height: 48px;
   }
@@ -167,7 +182,7 @@
 
   &::before,
   &::after {
-    content: '';
+    content: "";
     position: absolute;
     top: -4.5px;
     border: 5px solid transparent;
@@ -175,10 +190,11 @@
 
   &::before {
     left: 0;
-    border-left-color: var(--border);
+    border-left-color: @border;
   }
+
   &::after {
     right: 0;
-    border-right-color: var(--border);
+    border-right-color: @border;
   }
 }
