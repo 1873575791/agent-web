@@ -1,0 +1,286 @@
+import { useState, useRef, useEffect } from "react";
+import "./ChatAgent.css";
+
+const API_URL = "http://localhost:3001";
+
+function ChatAgent() {
+  const [messages, setMessages] = useState([]);
+  const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [models, setModels] = useState([]);
+  const [currentModel, setCurrentModel] = useState("doubao");
+  const chatContainerRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // 加载模型列表
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/models`);
+        const data = await res.json();
+        setModels(data.models);
+        setCurrentModel(data.current);
+      } catch {
+        console.error("加载模型列表失败");
+      }
+    };
+    loadModels();
+  }, []);
+
+  // 自动滚动到底部
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTop =
+        chatContainerRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // 切换模型
+  const handleSwitchModel = async (newModel) => {
+    if (newModel === currentModel) return;
+
+    try {
+      const res = await fetch(`${API_URL}/api/model/switch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: newModel }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setCurrentModel(newModel);
+        setMessages((prev) => [
+          ...prev,
+          { type: "agent", content: `✅ ${data.message}` },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { type: "error", content: data.error || "切换模型失败" },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { type: "error", content: "切换模型失败，请稍后重试" },
+      ]);
+    }
+  };
+
+  // 发送消息
+  const sendMessage = async (text) => {
+    const message = text || inputValue.trim();
+    if (!message || isLoading) return;
+
+    setShowWelcome(false);
+    setMessages((prev) => [...prev, { type: "user", content: message }]);
+    setInputValue("");
+    setIsLoading(true);
+
+    try {
+      const history = messages.map((msg) => ({
+        role: msg.type === "user" ? "user" : "assistant",
+        content: msg.content,
+      }));
+
+      const response = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, history, model: currentModel }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "agent",
+            content: data.response,
+            steps: data.steps || [],
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "error",
+            content: data.error || "处理请求失败",
+          },
+        ]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          type: "error",
+          content: "网络错误，请稍后重试",
+        },
+      ]);
+    }
+
+    setIsLoading(false);
+    inputRef.current?.focus();
+  };
+
+  // 快捷功能
+  const quickActions = [
+    { icon: "🌤️", label: "查天气", text: "查询北京天气" },
+    { icon: "🚄", label: "查高铁", text: "查询北京到上海的高铁票" },
+    { icon: "📰", label: "看新闻", text: "今日新闻热点" },
+    { icon: "🔢", label: "计算", text: "计算 123 * 456" },
+  ];
+
+  // 处理键盘事件
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  // 格式化内容
+  const formatContent = (content) => {
+    return content.split("\n").map((line, i) => (
+      <span key={i}>
+        {line}
+        {i < content.split("\n").length - 1 && <br />}
+      </span>
+    ));
+  };
+
+  return (
+    <div className="chat-agent">
+      {/* 头部 */}
+      <header className="chat-header">
+        <div className="header-logo">🤖</div>
+        <h1 className="header-title">AI Agent 助手</h1>
+        <div className="header-status">
+          <div className="model-selector">
+            <label>模型：</label>
+            <select
+              value={currentModel}
+              onChange={(e) => handleSwitchModel(e.target.value)}
+              disabled={isLoading}
+            >
+              {models.map((model) => (
+                <option
+                  key={model.key}
+                  value={model.key}
+                  disabled={!model.configured}
+                >
+                  {model.name}
+                  {!model.configured ? " (未配置)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="status-wrapper">
+            <span className="status-dot"></span>
+            <span>在线</span>
+          </div>
+        </div>
+      </header>
+
+      {/* 功能标签 */}
+      <div className="features">
+        {quickActions.map((action, i) => (
+          <button
+            key={i}
+            className="feature-tag"
+            onClick={() => sendMessage(action.text)}
+            disabled={isLoading}
+          >
+            <span>{action.icon}</span> {action.label}
+          </button>
+        ))}
+      </div>
+
+      {/* 聊天区域 */}
+      <div className="chat-container" ref={chatContainerRef}>
+        {showWelcome && (
+          <div className="welcome">
+            <div className="welcome-icon">👋</div>
+            <h2 className="welcome-title">你好！我是 AI 助手</h2>
+            <p className="welcome-desc">
+              我可以帮你查询天气、高铁票、新闻资讯等。选择上方功能标签快速开始，或直接输入你的问题。
+            </p>
+          </div>
+        )}
+
+        {messages.map((msg, i) => (
+          <div key={i} className={`message ${msg.type}`}>
+            <div className="message-avatar">
+              {msg.type === "user" ? "👤" : "🤖"}
+            </div>
+            <div className="message-content">
+              {/* 工具调用步骤 */}
+              {msg.steps && msg.steps.length > 0 && (
+                <div className="tool-steps">
+                  {msg.steps
+                    .filter((s) => s.type === "tool_call")
+                    .map((step, j) => (
+                      <div key={j} className="tool-step">
+                        <span className="tool-step-icon">🔧</span>
+                        <span>调用</span>
+                        <span className="tool-step-name">{step.name}</span>
+                        {step.args && Object.keys(step.args).length > 0 && (
+                          <span>
+                            (
+                            {Object.entries(step.args)
+                              .map(([k, v]) => `${k}: ${v}`)
+                              .join(", ")}
+                            )
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+              {formatContent(msg.content)}
+            </div>
+          </div>
+        ))}
+
+        {/* 加载状态 */}
+        {isLoading && (
+          <div className="message agent">
+            <div className="message-avatar">🤖</div>
+            <div className="message-content">
+              <div className="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 输入区域 */}
+      <div className="input-container">
+        <div className="input-wrapper">
+          <textarea
+            ref={inputRef}
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="输入消息，按 Enter 发送..."
+            rows={1}
+            disabled={isLoading}
+          />
+          <button
+            className="send-btn"
+            onClick={() => sendMessage()}
+            disabled={isLoading || !inputValue.trim()}
+          >
+            ➤
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default ChatAgent;
