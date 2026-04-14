@@ -78,6 +78,9 @@ function ChatAgent() {
     setInputValue("");
     setIsLoading(true);
 
+    // 先添加一个空的 AI 消息，用于流式填充
+    setMessages((prev) => [...prev, { type: "agent", content: "", steps: [] }]);
+
     try {
       const history = messages.map((msg) => ({
         role: msg.type === "user" ? "user" : "assistant",
@@ -90,34 +93,96 @@ function ChatAgent() {
         body: JSON.stringify({ message, history, model: currentModel }),
       });
 
-      const data = await response.json();
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      if (data.success) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            type: "agent",
-            content: data.response,
-            steps: data.steps || [],
-          },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            type: "error",
-            content: data.error || "处理请求失败",
-          },
-        ]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop(); // 保留未完成的部分
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.slice(6);
+            try {
+              const data = JSON.parse(jsonStr);
+
+              if (data.type === "content") {
+                // 流式追加内容 - 更新最后一条消息
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
+                    updated[lastIndex] = {
+                      ...updated[lastIndex],
+                      content: updated[lastIndex].content + data.content,
+                    };
+                  }
+                  return updated;
+                });
+              } else if (data.type === "tool_call") {
+                // 添加工具调用步骤
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
+                    const steps = updated[lastIndex].steps || [];
+                    updated[lastIndex] = {
+                      ...updated[lastIndex],
+                      steps: [...steps, data],
+                    };
+                  }
+                  return updated;
+                });
+              } else if (data.type === "tool_result") {
+                // 添加工具结果步骤
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
+                    const steps = updated[lastIndex].steps || [];
+                    updated[lastIndex] = {
+                      ...updated[lastIndex],
+                      steps: [...steps, data],
+                    };
+                  }
+                  return updated;
+                });
+              } else if (data.type === "error") {
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  if (lastIndex >= 0) {
+                    updated[lastIndex] = {
+                      type: "error",
+                      content: data.error || "处理请求失败",
+                    };
+                  }
+                  return updated;
+                });
+              }
+            } catch {
+              // JSON 解析失败，忽略
+            }
+          }
+        }
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          type: "error",
-          content: "网络错误，请稍后重试",
-        },
-      ]);
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastIndex = updated.length - 1;
+        if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
+          updated[lastIndex] = {
+            type: "error",
+            content: "网络错误，请稍后重试",
+          };
+        }
+        return updated;
+      });
     }
 
     setIsLoading(false);
@@ -243,8 +308,8 @@ function ChatAgent() {
           </div>
         ))}
 
-        {/* 加载状态 */}
-        {isLoading && (
+        {/* 加载状态 - 仅当没有正在填充的内容时显示 */}
+        {isLoading && messages[messages.length - 1]?.type !== "agent" && (
           <div className="message agent">
             <div className="message-avatar">🤖</div>
             <div className="message-content">

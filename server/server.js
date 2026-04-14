@@ -211,7 +211,7 @@ function switchModel(modelKey) {
   return MODEL_CONFIGS[modelKey].name;
 }
 
-// API 路由：聊天
+// API 路由：聊天（流式响应）
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, history, model } = req.body;
@@ -225,6 +225,12 @@ app.post('/api/chat', async (req, res) => {
       switchModel(model);
     }
 
+    // 设置 SSE 响应头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
     // 每次都重新初始化 agent，确保使用正确的模型配置
     agent = initAgent(currentModelKey);
 
@@ -237,41 +243,45 @@ app.post('/api/chat', async (req, res) => {
     }
     messages.push({ role: 'user', content: message });
 
-    const result = await agent.invoke({ messages });
-    const lastMessage = result.messages[result.messages.length - 1];
+    // 使用 streamEvents 实现 token 级流式输出
+    const stream = await agent.streamEvents({ messages }, { version: 'v2' });
 
-    // 收集中间步骤（工具调用）
-    const steps = [];
-    result.messages.forEach(msg => {
-      if (msg.tool_calls && msg.tool_calls.length > 0) {
-        msg.tool_calls.forEach(tc => {
-          steps.push({
-            type: 'tool_call',
-            name: tc.name,
-            args: tc.args
-          });
-        });
+    for await (const event of stream) {
+      const { event: eventType, name, data } = event;
+
+      // 处理 token 级流式内容
+      if (eventType === 'on_chat_model_stream') {
+        if (data?.chunk?.content) {
+          res.write(`data: ${JSON.stringify({ type: 'content', content: data.chunk.content })}\n\n`);
+        }
       }
-      if (msg.name && msg.content && msg.type === 'tool') {
-        steps.push({
+
+      // 处理工具调用开始
+      if (eventType === 'on_tool_start') {
+        res.write(`data: ${JSON.stringify({
+          type: 'tool_call',
+          name: name,
+          args: data?.input || {}
+        })}\n\n`);
+      }
+
+      // 处理工具调用结果
+      if (eventType === 'on_tool_end') {
+        res.write(`data: ${JSON.stringify({
           type: 'tool_result',
-          name: msg.name,
-          result: msg.content
-        });
+          name: name,
+          result: data?.output || ''
+        })}\n\n`);
       }
-    });
+    }
 
-    res.json({
-      success: true,
-      response: lastMessage.content,
-      steps: steps
-    });
+    // 发送完成信号
+    res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+    res.end();
   } catch (error) {
     console.error('Agent error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message || '处理请求失败'
-    });
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message || '处理请求失败' })}\n\n`);
+    res.end();
   }
 });
 
