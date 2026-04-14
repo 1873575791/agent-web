@@ -243,6 +243,9 @@ app.post('/api/chat', async (req, res) => {
     }
     messages.push({ role: 'user', content: message });
 
+    // 收集 token 使用量
+    let tokenUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+
     // 使用 streamEvents 实现 token 级流式输出
     const stream = await agent.streamEvents({ messages }, { version: 'v2' });
 
@@ -273,6 +276,21 @@ app.post('/api/chat', async (req, res) => {
           result: data?.output || ''
         })}\n\n`);
       }
+
+      // 收集 token 使用量
+      if (eventType === 'on_chat_model_end') {
+        const usage = data?.output?.llmOutput?.tokenUsage;
+        if (usage) {
+          tokenUsage.promptTokens += usage.promptTokens || 0;
+          tokenUsage.completionTokens += usage.completionTokens || 0;
+          tokenUsage.totalTokens += usage.totalTokens || 0;
+        }
+      }
+    }
+
+    // 发送 token 使用量
+    if (tokenUsage.totalTokens > 0) {
+      res.write(`data: ${JSON.stringify({ type: 'usage', usage: tokenUsage })}\n\n`);
     }
 
     // 发送完成信号
@@ -318,6 +336,54 @@ app.post('/api/model/switch', (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
+});
+
+// 获取模型余额
+app.get('/api/balance', async (req, res) => {
+  const balances = {};
+
+  for (const [key, config] of Object.entries(MODEL_CONFIGS)) {
+    try {
+      if (!config.apiKey || config.apiKey.includes('your_')) {
+        balances[key] = { available: false, balance: 0, message: '未配置' };
+        continue;
+      }
+
+      // DeepSeek 余额查询
+      if (key === 'deepseek') {
+        const response = await axios.get('https://api.deepseek.com/user/balance', {
+          headers: { Authorization: `Bearer ${config.apiKey}` },
+          timeout: 10000
+        });
+        const data = response.data;
+        if (data.is_available) {
+          balances[key] = {
+            available: true,
+            balance: data.balance_infos?.find(b => b.currency === 'CNY')?.total_balance || '0',
+            currency: 'CNY'
+          };
+        } else {
+          balances[key] = { available: false, balance: 0, message: '账户不可用' };
+        }
+      }
+      // 豆包/火山引擎 - 暂不支持余额查询 API
+      else if (key === 'doubao') {
+        balances[key] = {
+          available: true,
+          balance: '-',
+          message: '火山引擎请在控制台查看',
+          consoleUrl: 'https://console.volcengine.com/ark'
+        };
+      }
+      else {
+        balances[key] = { available: true, balance: '-', message: '暂不支持查询' };
+      }
+    } catch (error) {
+      balances[key] = { available: false, balance: 0, message: error.message };
+    }
+  }
+
+  res.json({ balances, current: currentModelKey });
 });
 
 // 启动服务器
