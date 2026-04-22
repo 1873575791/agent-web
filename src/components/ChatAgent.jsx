@@ -3,6 +3,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import {
+  addMessage,
+  updateMessage,
+  getAllMessages,
+  clearAllMessages,
+  getChatHistory,
+} from "../utils/chatDB";
 import "./ChatAgent.less";
 
 const API_URL = "http://localhost:3001";
@@ -16,6 +23,8 @@ function ChatAgent() {
   const [currentModel, setCurrentModel] = useState("doubao");
   const [balances, setBalances] = useState({});
   const [lastUsage, setLastUsage] = useState(null);
+  const [isThinking, setIsThinking] = useState(false);
+  const [thinkingText, setThinkingText] = useState("");
   const chatContainerRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -32,6 +41,28 @@ function ChatAgent() {
       }
     };
     loadModels();
+  }, []);
+
+  // 从 IndexedDB 加载历史消息
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const saved = await getAllMessages();
+        if (saved.length > 0) {
+          const msgs = saved.map((s) => ({
+            id: s.id,
+            type: s.type,
+            content: s.content,
+            steps: s.steps || [],
+          }));
+          setMessages(msgs);
+          setShowWelcome(false);
+        }
+      } catch {
+        console.error("加载历史消息失败");
+      }
+    };
+    loadHistory();
   }, []);
 
   // 加载余额信息（供其他地方调用）
@@ -67,6 +98,19 @@ function ChatAgent() {
     }
   }, [messages]);
 
+  // 清空历史记忆
+  const handleClearHistory = async () => {
+    if (isLoading) return;
+    try {
+      await clearAllMessages();
+      setMessages([]);
+      setShowWelcome(true);
+      setLastUsage(null);
+    } catch {
+      console.error("清空历史失败");
+    }
+  };
+
   // 切换模型
   const handleSwitchModel = async (newModel) => {
     if (newModel === currentModel) return;
@@ -85,6 +129,8 @@ function ChatAgent() {
           ...prev,
           { type: "agent", content: `✅ ${data.message}` },
         ]);
+        // 保存到 IndexedDB
+        addMessage({ type: "agent", content: `✅ ${data.message}` });
       } else {
         setMessages((prev) => [
           ...prev,
@@ -105,23 +151,46 @@ function ChatAgent() {
     if (!message || isLoading) return;
 
     setShowWelcome(false);
-    setMessages((prev) => [...prev, { type: "user", content: message }]);
+    // 保存用户消息到 IndexedDB
+    const userId = await addMessage({ type: "user", content: message });
+    setMessages((prev) => [
+      ...prev,
+      { id: userId, type: "user", content: message },
+    ]);
     setInputValue("");
     setIsLoading(true);
+    setIsThinking(true);
+    setThinkingText("正在思考...");
 
     // 先添加一个空的 AI 消息，用于流式填充
-    setMessages((prev) => [...prev, { type: "agent", content: "", steps: [] }]);
+    const agentId = await addMessage({ type: "agent", content: "", steps: [] });
+    setMessages((prev) => [
+      ...prev,
+      { id: agentId, type: "agent", content: "", steps: [] },
+    ]);
 
     try {
-      const history = messages.map((msg) => ({
-        role: msg.type === "user" ? "user" : "assistant",
-        content: msg.content,
-      }));
+      // 从 IndexedDB 获取历史记忆
+      const history = await getChatHistory();
+      // 移除最后一条空的 assistant 消息（刚添加的空 AI 消息）
+      const cleanedHistory = history.filter((h, idx) => {
+        if (
+          h.role === "assistant" &&
+          idx === history.length - 1 &&
+          !h.content.trim()
+        )
+          return false;
+        return true;
+      });
 
       const response = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, history, model: currentModel }),
+        body: JSON.stringify({
+          message,
+          history: cleanedHistory,
+          model: currentModel,
+        }),
       });
 
       const reader = response.body.getReader();
@@ -144,6 +213,8 @@ function ChatAgent() {
 
               if (data.type === "content") {
                 // 流式追加内容 - 更新最后一条消息
+                setIsThinking(false);
+                setThinkingText("");
                 setMessages((prev) => {
                   const updated = [...prev];
                   const lastIndex = updated.length - 1;
@@ -152,34 +223,57 @@ function ChatAgent() {
                       ...updated[lastIndex],
                       content: updated[lastIndex].content + data.content,
                     };
+                    // 同步到 IndexedDB
+                    updateMessage(updated[lastIndex].id, {
+                      content: updated[lastIndex].content,
+                    });
                   }
                   return updated;
                 });
               } else if (data.type === "tool_call") {
                 // 添加工具调用步骤
+                setIsThinking(true);
+                setThinkingText(`正在调用 ${data.name}...`);
                 setMessages((prev) => {
                   const updated = [...prev];
                   const lastIndex = updated.length - 1;
                   if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
                     const steps = updated[lastIndex].steps || [];
+                    const newSteps = [...steps, { ...data, status: "running" }];
                     updated[lastIndex] = {
                       ...updated[lastIndex],
-                      steps: [...steps, data],
+                      steps: newSteps,
                     };
+                    // 同步到 IndexedDB
+                    updateMessage(updated[lastIndex].id, { steps: newSteps });
                   }
                   return updated;
                 });
               } else if (data.type === "tool_result") {
-                // 添加工具结果步骤
+                // 添加工具结果步骤，标记上一个工具调用为完成
+                setIsThinking(true);
+                setThinkingText("正在分析结果...");
                 setMessages((prev) => {
                   const updated = [...prev];
                   const lastIndex = updated.length - 1;
                   if (lastIndex >= 0 && updated[lastIndex].type === "agent") {
-                    const steps = updated[lastIndex].steps || [];
+                    const steps = [...(updated[lastIndex].steps || [])];
+                    // 将对应的 tool_call 标记为完成
+                    const lastCallIdx = [...steps]
+                      .reverse()
+                      .findIndex(
+                        (s) => s.type === "tool_call" && s.status === "running",
+                      );
+                    if (lastCallIdx !== -1) {
+                      const realIdx = steps.length - 1 - lastCallIdx;
+                      steps[realIdx] = { ...steps[realIdx], status: "done" };
+                    }
                     updated[lastIndex] = {
                       ...updated[lastIndex],
-                      steps: [...steps, data],
+                      steps,
                     };
+                    // 同步到 IndexedDB
+                    updateMessage(updated[lastIndex].id, { steps });
                   }
                   return updated;
                 });
@@ -195,6 +289,9 @@ function ChatAgent() {
                   }
                   return updated;
                 });
+              } else if (data.type === "done") {
+                setIsThinking(false);
+                setThinkingText("");
               } else if (data.type === "usage") {
                 // 更新 token 使用量
                 setLastUsage(data.usage);
@@ -222,6 +319,8 @@ function ChatAgent() {
     }
 
     setIsLoading(false);
+    setIsThinking(false);
+    setThinkingText("");
     inputRef.current?.focus();
   };
 
@@ -385,6 +484,14 @@ function ChatAgent() {
           <div className="status-wrapper">
             <span className="status-dot"></span>
             <span>在线</span>
+            <button
+              className="clear-history-btn"
+              onClick={handleClearHistory}
+              title="清空聊天历史"
+              disabled={isLoading || messages.length === 0}
+            >
+              🗑️
+            </button>
           </div>
         </div>
       </header>
@@ -439,8 +546,13 @@ function ChatAgent() {
                   {msg.steps
                     .filter((s) => s.type === "tool_call")
                     .map((step, j) => (
-                      <div key={j} className="tool-step">
-                        <span className="tool-step-icon">🔧</span>
+                      <div
+                        key={j}
+                        className={`tool-step ${step.status === "running" ? "running" : "done"}`}
+                      >
+                        <span className="tool-step-icon">
+                          {step.status === "running" ? "⏳" : "✅"}
+                        </span>
                         <span>调用</span>
                         <span className="tool-step-name">{step.name}</span>
                         {step.args && Object.keys(step.args).length > 0 && (
@@ -452,11 +564,28 @@ function ChatAgent() {
                             )
                           </span>
                         )}
+                        {step.status === "running" && (
+                          <span className="tool-step-status">执行中...</span>
+                        )}
                       </div>
                     ))}
                 </div>
               )}
               {formatContent(msg.content)}
+              {/* 思考中指示器 - 仅在最后一条 agent 消息且正在思考时显示 */}
+              {isLoading &&
+                isThinking &&
+                i === messages.length - 1 &&
+                msg.type === "agent" && (
+                  <div className="thinking-indicator">
+                    <div className="thinking-dots">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                    <span className="thinking-text">{thinkingText}</span>
+                  </div>
+                )}
             </div>
           </div>
         ))}

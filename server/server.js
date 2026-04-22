@@ -9,6 +9,7 @@ import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import axios from "axios";
+import { buildSystemPrompt } from "./skills/systemPrompt.js";
 
 dotenv.config();
 
@@ -61,7 +62,8 @@ const stationCodeMap = {
   '昆明': 'KMM', '贵阳': 'GIW', '南宁': 'NNZ',
   '福州': 'FZS', '厦门': 'XMS', '厦门北': 'XKS',
   '南昌': 'NXG', '兰州': 'LZJ', '乌鲁木齐': 'WAR',
-  '临汾': 'LFV', '临汾西': 'ILV'
+  '临汾': 'LFV', '临汾西': 'ILV',
+  '太原': 'TYV', '太原南': 'TNV'
 };
 
 // 自定义工具：天气查询
@@ -96,7 +98,7 @@ const weatherTool = new DynamicStructuredTool({
 // 自定义工具：高铁票查询
 const trainTicketTool = new DynamicStructuredTool({
   name: "train_ticket",
-  description: "查询高铁/火车票信息。支持的城市：北京、上海、广州、深圳、杭州、南京、武汉、成都、重庆、西安、郑州、天津、长沙、合肥、苏州、无锡、济南、青岛、沈阳、大连、哈尔滨、长春、昆明、贵阳、南宁、福州、厦门、南昌、兰州、乌鲁木齐、临汾等",
+  description: "查询高铁/火车票信息。支持的城市：北京、上海、广州、深圳、杭州、南京、武汉、成都、重庆、西安、郑州、天津、长沙、合肥、苏州、无锡、济南、青岛、沈阳、大连、哈尔滨、长春、昆明、贵阳、南宁、福州、厦门、南昌、兰州、乌鲁木齐、临汾、太原等",
   schema: z.object({
     fromStation: z.string().describe("出发站，如：北京"),
     toStation: z.string().describe("到达站，如：上海"),
@@ -171,6 +173,100 @@ const newsTool = new DynamicStructuredTool({
   }
 });
 
+// 格式化金额（元为单位）
+function formatFinanceNumber(num) {
+  if (num === null || num === undefined) return '-';
+  const absNum = Math.abs(num);
+  if (absNum >= 1e12) return (num / 1e12).toFixed(2) + ' 万亿';
+  if (absNum >= 1e8) return (num / 1e8).toFixed(2) + ' 亿';
+  if (absNum >= 1e4) return (num / 1e4).toFixed(2) + ' 万';
+  return num.toFixed(2);
+}
+
+// 自定义工具：财务报告查询
+const financialReportTool = new DynamicStructuredTool({
+  name: "financial_report",
+  description: "查询上市公司财务报告，获取营业收入、净利润、每股收益、ROE等关键财务指标。支持A股、港股和美股上市公司，如比亚迪、特斯拉、腾讯、茅台等",
+  schema: z.object({
+    company: z.string().describe("公司名称或股票代码，如：比亚迪、特斯拉、腾讯、茅台、AAPL")
+  }),
+  func: async ({ company }) => {
+    try {
+      // 1. 搜索股票代码
+      const searchRes = await axios.get('https://searchapi.eastmoney.com/api/suggest/get', {
+        params: {
+          input: company,
+          type: 14,
+          token: 'D43BF722C8E33BDC906FB84D85E326E8',
+          count: 5
+        },
+        timeout: 10000
+      });
+
+      const stockList = searchRes.data?.QuotationCodeTable?.Data;
+      if (!stockList?.length) {
+        return `未找到 "${company}" 的相关股票信息，请检查公司名称或股票代码`;
+      }
+
+      const stock = stockList[0];
+      const stockCode = stock.Code;
+      const stockName = stock.Name;
+      const securityType = stock.SecurityTypeName || '';
+
+      // 判断市场类型
+      const isUS = securityType.includes('美股') || securityType.includes('纳斯达克') || /^[A-Z]{1,6}$/.test(stockCode);
+      const isHK = securityType.includes('港股') || securityType.includes('香港');
+
+      // 2. 获取财务数据（主要指标）
+      let reportName = 'RPT_LICO_FN_CPD';
+      if (isUS) reportName = 'RPT_USFN_LICO_FN_CPD';
+      else if (isHK) reportName = 'RPT_HKFNFN_CPD';
+
+      const columns = 'SECURITY_CODE,SECURITY_NAME_ABBR,REPORT_DATE,BASIC_EPS,WEIGHTAVG_ROE,MGJYXJJE,BPS,TOTAL_OPERATE_INCOME,PARENT_NETPROFIT,OPERATE_INCOME_YOY,PARENT_NETPROFIT_YOY';
+
+      const financeRes = await axios.get('https://datacenter.eastmoney.com/securities/api/data/v1/get', {
+        params: {
+          reportName,
+          columns,
+          filter: `(SECURITY_CODE="${stockCode}")`,
+          pageSize: 4,
+          sortTypes: -1,
+          sortColumns: 'REPORT_DATE',
+          source: 'WEB',
+          client: 'WEB'
+        },
+        timeout: 15000
+      });
+
+      const financeData = financeRes.data?.result?.data;
+      if (!financeData?.length) {
+        return `暂无 ${stockName}(${stockCode}) 的财务报告数据`;
+      }
+
+      // 3. 格式化输出
+      let result = `📊 ${stockName}(${stockCode}) 财务报告摘要\n`;
+      result += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+
+      financeData.forEach((item) => {
+        const date = item.REPORT_DATE?.split(' ')[0] || item.REPORT_DATE || '未知';
+        result += `\n📅 报告期：${date}\n`;
+        result += `  💰 营业收入：${formatFinanceNumber(item.TOTAL_OPERATE_INCOME)}\n`;
+        result += `  📈 归母净利润：${formatFinanceNumber(item.PARENT_NETPROFIT)}\n`;
+        result += `  📊 营收同比：${item.OPERATE_INCOME_YOY != null ? item.OPERATE_INCOME_YOY.toFixed(2) + '%' : '-'}\n`;
+        result += `  📊 净利润同比：${item.PARENT_NETPROFIT_YOY != null ? item.PARENT_NETPROFIT_YOY.toFixed(2) + '%' : '-'}\n`;
+        result += `  💵 每股收益：${item.BASIC_EPS != null ? item.BASIC_EPS.toFixed(2) : '-'}\n`;
+        result += `  📉 加权ROE：${item.WEIGHTAVG_ROE != null ? item.WEIGHTAVG_ROE.toFixed(2) + '%' : '-'}\n`;
+        result += `  💳 每股经营现金流：${item.MGJYXJJE != null ? item.MGJYXJJE.toFixed(2) : '-'}\n`;
+        result += `  🏦 每股净资产：${item.BPS != null ? item.BPS.toFixed(2) : '-'}\n`;
+      });
+
+      return result;
+    } catch (error) {
+      return `财务报告查询失败：${error.message}`;
+    }
+  }
+});
+
 // 初始化 Agent
 let agent = null;
 
@@ -197,8 +293,10 @@ function initAgent(modelKey = currentModelKey) {
     temperature: 0,
   });
 
-  const tools = [new Calculator(), weatherTool, trainTicketTool, newsTool];
-  return createReactAgent({ llm, tools });
+  const tools = [new Calculator(), weatherTool, trainTicketTool, newsTool, financialReportTool];
+  const systemPrompt = buildSystemPrompt(tools);
+
+  return createReactAgent({ llm, tools, prompt: systemPrompt });
 }
 
 // 切换模型

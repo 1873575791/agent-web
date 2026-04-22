@@ -173,6 +173,28 @@
   gap: 8px;
 }
 
+.clear-history-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.5);
+    transform: scale(1.1);
+  }
+
+  &:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+}
+
 .status-dot {
   width: 8px;
   height: 8px;
@@ -548,6 +570,28 @@
   gap: 8px;
   padding: 6px 0;
   color: @text-secondary;
+  transition: all 0.3s;
+
+  &.running {
+    .tool-step-name {
+      color: @blue;
+      animation: pulse-text 1.5s infinite;
+    }
+  }
+
+  &.done {
+    opacity: 0.8;
+  }
+}
+
+@keyframes pulse-text {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .tool-step-icon {
@@ -557,6 +601,64 @@
 .tool-step-name {
   color: @warning;
   font-weight: 500;
+}
+
+.tool-step-status {
+  color: @blue;
+  font-size: 12px;
+  animation: pulse-text 1.5s infinite;
+}
+
+// ========== 思考中指示器 ==========
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(99, 102, 241, 0.08);
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.thinking-dots {
+  display: flex;
+  gap: 4px;
+
+  span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: @accent;
+    animation: thinking-bounce 1.4s infinite ease-in-out;
+
+    &:nth-child(1) {
+      animation-delay: -0.32s;
+    }
+
+    &:nth-child(2) {
+      animation-delay: -0.16s;
+    }
+  }
+}
+
+.thinking-text {
+  font-size: 13px;
+  color: @text-secondary;
+  animation: pulse-text 2s infinite;
+}
+
+@keyframes thinking-bounce {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 // ========== 输入区域 ==========
