@@ -1,4 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import "./ChatAgent.less";
 
 const API_URL = "http://localhost:3001";
@@ -237,14 +241,88 @@ function ChatAgent() {
     }
   };
 
-  // 格式化内容
+  // 复制代码到剪贴板
+  const copyToClipboard = useCallback((text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      // 可选：显示复制成功提示
+    });
+  }, []);
+
+  // 格式化内容 - 使用 Markdown 渲染
   const formatContent = (content) => {
-    return content.split("\n").map((line, i) => (
-      <span key={i}>
-        {line}
-        {i < content.split("\n").length - 1 && <br />}
-      </span>
-    ));
+    if (!content) return null;
+
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ inline, className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || "");
+            const codeString = String(children).replace(/\n$/, "");
+
+            if (!inline && (match || codeString.includes("\n"))) {
+              return (
+                <div className="code-block-wrapper">
+                  <div className="code-block-header">
+                    <span className="code-block-lang">
+                      {match ? match[1] : "code"}
+                    </span>
+                    <button
+                      className="code-block-copy"
+                      onClick={() => copyToClipboard(codeString)}
+                    >
+                      复制
+                    </button>
+                  </div>
+                  <SyntaxHighlighter
+                    style={oneDark}
+                    language={match ? match[1] : "text"}
+                    PreTag="div"
+                    customStyle={{
+                      margin: 0,
+                      borderRadius: "0 0 8px 8px",
+                      fontSize: "13px",
+                    }}
+                    {...props}
+                  >
+                    {codeString}
+                  </SyntaxHighlighter>
+                </div>
+              );
+            }
+
+            return (
+              <code className="inline-code" {...props}>
+                {children}
+              </code>
+            );
+          },
+          // 链接在新窗口打开
+          a({ children, href, ...props }) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                {...props}
+              >
+                {children}
+              </a>
+            );
+          },
+          // 表格样式
+          table({ children, ...props }) {
+            return (
+              <div className="table-wrapper">
+                <table {...props}>{children}</table>
+              </div>
+            );
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    );
   };
 
   return (
