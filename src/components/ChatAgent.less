@@ -322,6 +322,215 @@
   line-height: 1.6;
   font-size: 15px;
   word-break: break-word;
+
+  // ========== Markdown 格式化样式 ==========
+  // 标题
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin: 12px 0 8px;
+    font-weight: 600;
+    line-height: 1.4;
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  h1 {
+    font-size: 1.4em;
+    border-bottom: 1px solid @bg-tertiary;
+    padding-bottom: 6px;
+  }
+  h2 {
+    font-size: 1.25em;
+    border-bottom: 1px solid @bg-tertiary;
+    padding-bottom: 4px;
+  }
+  h3 {
+    font-size: 1.1em;
+  }
+  h4 {
+    font-size: 1em;
+  }
+
+  // 段落
+  p {
+    margin: 8px 0;
+    &:first-child {
+      margin-top: 0;
+    }
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  // 列表
+  ul,
+  ol {
+    margin: 8px 0;
+    padding-left: 24px;
+
+    li {
+      margin: 4px 0;
+      line-height: 1.6;
+    }
+  }
+
+  ul {
+    list-style-type: disc;
+  }
+
+  ol {
+    list-style-type: decimal;
+  }
+
+  // 行内代码
+  .inline-code {
+    background: rgba(99, 102, 241, 0.15);
+    color: #c4b5fd;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  }
+
+  // 代码块
+  .code-block-wrapper {
+    margin: 10px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid @bg-tertiary;
+  }
+
+  .code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: #2d2d2d;
+    font-size: 12px;
+  }
+
+  .code-block-lang {
+    color: @text-secondary;
+    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .code-block-copy {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: @text-secondary;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: @text-primary;
+    }
+  }
+
+  // 引用
+  blockquote {
+    margin: 8px 0;
+    padding: 8px 16px;
+    border-left: 3px solid @accent;
+    background: rgba(99, 102, 241, 0.08);
+    border-radius: 0 6px 6px 0;
+    color: @text-secondary;
+
+    p {
+      margin: 4px 0;
+    }
+  }
+
+  // 链接
+  a {
+    color: #818cf8;
+    text-decoration: none;
+    transition: color 0.2s;
+
+    &:hover {
+      color: #a5b4fc;
+      text-decoration: underline;
+    }
+  }
+
+  // 分隔线
+  hr {
+    margin: 12px 0;
+    border: none;
+    border-top: 1px solid @bg-tertiary;
+  }
+
+  // 强调
+  strong {
+    font-weight: 600;
+    color: @text-primary;
+  }
+
+  em {
+    font-style: italic;
+    color: @text-secondary;
+  }
+
+  // 删除线
+  del {
+    color: @text-secondary;
+  }
+
+  // 表格
+  .table-wrapper {
+    overflow-x: auto;
+    margin: 10px 0;
+  }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13px;
+
+    th,
+    td {
+      padding: 8px 12px;
+      border: 1px solid @bg-tertiary;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(99, 102, 241, 0.15);
+      font-weight: 600;
+      color: @text-primary;
+    }
+
+    tr:nth-child(even) {
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    tr:hover {
+      background: rgba(99, 102, 241, 0.08);
+    }
+  }
+
+  // 图片
+  img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin: 8px 0;
+  }
+
+  // 任务列表 (GFM)
+  input[type="checkbox"] {
+    margin-right: 6px;
+    accent-color: @accent;
+  }
 }
 
 // ========== 工具调用步骤 ==========
