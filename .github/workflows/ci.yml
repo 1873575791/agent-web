@@ -8,6 +8,12 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
   # ============ CI：代码检查与构建 ============
@@ -43,6 +49,44 @@ jobs:
           name: dist
           path: dist/
           retention-days: 7
+
+  # ============ GitHub Pages 部署（仅 push 触发） ============
+  deploy:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 
   # ============ Release：自动发布（仅 push 触发，PR 不触发） ============
   release:
@@ -156,6 +200,10 @@ jobs:
           echo "" >> release_notes.md
           echo "## 🚀 部署说明" >> release_notes.md
           echo "" >> release_notes.md
+          echo "### 在线预览" >> release_notes.md
+          echo "👉 https://1873575791.github.io/agent-web/" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "### 自行部署" >> release_notes.md
           echo '```bash' >> release_notes.md
           echo "# 1. 下载并解压" >> release_notes.md
           echo "tar -xzf agent-web.tar.gz" >> release_notes.md
@@ -170,7 +218,7 @@ jobs:
           echo '```' >> release_notes.md
           echo "" >> release_notes.md
           echo "## ⚙️ 环境要求" >> release_notes.md
-          echo "- Node.js >= 18" >> release_notes.md
+          echo "- Node.js >= 20" >> release_notes.md
           echo "- 需要配置至少一个模型的 API Key（豆包/DeepSeek）" >> release_notes.md
           echo "" >> release_notes.md
           echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${TAG_NAME}" >> release_notes.md
