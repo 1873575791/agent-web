@@ -12,7 +12,8 @@ import {
 } from "../utils/chatDB";
 import "./ChatAgent.less";
 
-const API_URL = "http://localhost:3001";
+// API 基础路径：开发环境由 Vite proxy 转发，生产环境由 Express 同源托管
+const API_URL = "";
 
 function ChatAgent() {
   const [messages, setMessages] = useState([]);

@@ -3,6 +3,8 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { ChatOpenAI } from "@langchain/openai";
 import { Calculator } from "@langchain/community/tools/calculator";
 import { DynamicStructuredTool } from "@langchain/core/tools";
@@ -484,9 +486,25 @@ app.get('/api/balance', async (req, res) => {
   res.json({ balances, current: currentModelKey });
 });
 
+// 获取当前目录路径（ESModule 兼容）
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 托管前端静态文件（生产环境）
+const distPath = path.resolve(__dirname, '../dist');
+app.use(express.static(distPath));
+
+// SPA 兜底：所有非 API 请求返回 index.html
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(distPath, 'index.html'));
+  }
+});
+
 // 启动服务器
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
   console.log(`🤖 Agent 服务已启动：http://localhost:${PORT}`);
   console.log(`📝 API 端点：POST http://localhost:${PORT}/api/chat`);
+  console.log(`🌐 前端页面：http://localhost:${PORT}`);
 });
