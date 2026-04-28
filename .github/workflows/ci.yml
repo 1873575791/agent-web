@@ -1,0 +1,187 @@
+name: CI & Release
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  # ============ CI：代码检查与构建 ============
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18, 20]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Build project
+        run: npm run build
+
+      - name: Upload build artifacts
+        if: matrix.node-version == 20
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ============ Release：自动发布（仅 push 触发，PR 不触发） ============
+  release:
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Get version from package.json
+        id: pkg_version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        id: check_tag
+        continue-on-error: true
+        run: |
+          git fetch --tags
+          if git tag | grep -q "^v${{ steps.pkg_version.outputs.version }}$"; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Package release artifacts
+        run: |
+          mkdir -p release/agent-web
+          # 前端构建产物
+          cp -r dist release/agent-web/dist
+          # 服务端代码
+          cp -r server release/agent-web/server
+          # 配置文件
+          cp package.json package-lock.json release/agent-web/
+          cp .env.example release/agent-web/.env.example
+          # 启动脚本
+          cat > release/agent-web/start.sh << 'SCRIPT'
+          #!/bin/bash
+          # agent-web 启动脚本
+          set -e
+
+          echo "🚀 Starting agent-web..."
+
+          # 检查 .env 文件
+          if [ ! -f .env ]; then
+            echo "⚠️  未找到 .env 文件，正在从模板创建..."
+            cp .env.example .env
+            echo "📝 请编辑 .env 文件，填入你的 API Key 后重新启动"
+            exit 1
+          fi
+
+          # 安装依赖
+          echo "📦 Installing dependencies..."
+          npm ci --omit=dev --ignore-scripts
+
+          # 启动服务
+          echo "🤖 Starting server..."
+          node server/server.js
+          SCRIPT
+          chmod +x release/agent-web/start.sh
+
+          # 打包
+          cd release
+          tar -czf ../agent-web.tar.gz agent-web
+          cd ..
+
+      - name: Generate release notes
+        id: release_notes
+        run: |
+          TAG_NAME="v${{ steps.pkg_version.outputs.version }}"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          # 获取上一个 tag
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | head -1)
+
+          # 生成 changelog
+          echo "## What's Changed" > release_notes.md
+          echo "" >> release_notes.md
+
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "### Commits since $PREVIOUS_TAG" >> release_notes.md
+            echo "" >> release_notes.md
+            git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%h)" >> release_notes.md
+          else
+            echo "### Initial Release" >> release_notes.md
+            echo "" >> release_notes.md
+            git log --pretty=format:"- %s (%h)" | head -20 >> release_notes.md
+          fi
+
+          echo "" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "---" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 🚀 部署说明" >> release_notes.md
+          echo "" >> release_notes.md
+          echo '```bash' >> release_notes.md
+          echo "# 1. 下载并解压" >> release_notes.md
+          echo "tar -xzf agent-web.tar.gz" >> release_notes.md
+          echo "cd agent-web" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# 2. 配置环境变量" >> release_notes.md
+          echo "cp .env.example .env" >> release_notes.md
+          echo "vim .env  # 填入你的 API Key" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# 3. 一键启动" >> release_notes.md
+          echo "./start.sh" >> release_notes.md
+          echo '```' >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## ⚙️ 环境要求" >> release_notes.md
+          echo "- Node.js >= 18" >> release_notes.md
+          echo "- 需要配置至少一个模型的 API Key（豆包/DeepSeek）" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${TAG_NAME}" >> release_notes.md
+
+      - name: Create tag and GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_notes.outputs.tag_name }}
+          body_path: release_notes.md
+          files: |
+            agent-web.tar.gz
+          draft: false
+          prerelease: ${{ steps.check_tag.outputs.exists == 'true' }}
