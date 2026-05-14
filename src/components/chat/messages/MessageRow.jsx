@@ -1,4 +1,6 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import { parseAgentQuestionnaire } from "../questionnaire/parseAgentQuestionnaire.js";
+import { QuestionnaireCard } from "../questionnaire/QuestionnaireCard.jsx";
 
 /**
  * 虚拟列表单行：memo 减少 Markdown 子树在滚动时的无效重绘
@@ -11,12 +13,25 @@ export const MessageRow = memo(function MessageRow({
   isThinking,
   thinkingText,
   formatContent,
+  onQuestionnaireSubmit,
 }) {
   const isLastAgent =
     isLoading &&
     isThinking &&
     index === lastIndex &&
     msg.type === "agent";
+
+  const { markdown, spec } = useMemo(
+    () =>
+      msg.type === "agent"
+        ? parseAgentQuestionnaire(msg.content || "")
+        : { markdown: msg.content || "", spec: null },
+    [msg.type, msg.content],
+  );
+
+  const questionnaireKey = spec
+    ? `${msg.id}__${JSON.stringify(spec)}`
+    : `${msg.id}__none`;
 
   return (
     <div className={`virtuoso-msg-row ${msg.type}`}>
@@ -55,7 +70,15 @@ export const MessageRow = memo(function MessageRow({
                 ))}
             </div>
           )}
-          {formatContent(msg.content)}
+          {formatContent(markdown)}
+          {msg.type === "agent" && spec && onQuestionnaireSubmit ? (
+            <QuestionnaireCard
+              key={questionnaireKey}
+              spec={spec}
+              disabled={isLoading}
+              onSubmit={onQuestionnaireSubmit}
+            />
+          ) : null}
           {isLastAgent && (
             <div className="thinking-indicator">
               <div className="thinking-dots">

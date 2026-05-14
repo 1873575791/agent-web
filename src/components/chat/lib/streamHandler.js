@@ -1,4 +1,4 @@
-import { updateMessage } from "../../utils/chatDB";
+import { updateMessage } from "../../../utils/chatDB";
 
 /** 处理单条 SSE JSON 事件（与 server 推送的 type 对齐） */
 export function handleChatStreamEvent(data, ctx) {

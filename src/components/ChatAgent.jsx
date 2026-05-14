@@ -5,12 +5,17 @@ import {
   clearAllMessages,
   getChatHistory,
 } from "../utils/chatDB";
-import { fetchModels, fetchBalances, postSwitchModel, postChat } from "./chat/api.js";
-import { handleChatStreamEvent } from "./chat/streamHandler.js";
-import { QUICK_ACTIONS } from "./chat/quickActions.js";
-import { useMarkdownContent } from "./chat/useMarkdownContent.jsx";
-import { ChatHeader } from "./chat/ChatHeader.jsx";
-import { ChatMessageList } from "./chat/ChatMessageList.jsx";
+import {
+  fetchModels,
+  fetchBalances,
+  postSwitchModel,
+  postChat,
+  handleChatStreamEvent,
+  QUICK_ACTIONS,
+  useMarkdownContent,
+  ChatHeader,
+  ChatMessageList,
+} from "./chat/index.js";
 import "./ChatAgent.less";
 
 function ChatAgent() {
@@ -224,6 +229,10 @@ function ChatAgent() {
     }
   };
 
+  const submitFromQuestionnaire = (text) => {
+    void sendMessage(text);
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -275,6 +284,7 @@ function ChatAgent() {
         isThinking={isThinking}
         thinkingText={thinkingText}
         formatContent={formatContent}
+        onQuestionnaireSubmit={submitFromQuestionnaire}
       />
 
       <div className="input-container">

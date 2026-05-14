@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { MessageRow } from "./MessageRow.jsx";
-import { ChatTypingFooter } from "./ChatTypingFooter.jsx";
-import { ChatWelcome } from "./ChatWelcome.jsx";
+import { ChatTypingFooter } from "../ui/ChatTypingFooter.jsx";
+import { ChatWelcome } from "../ui/ChatWelcome.jsx";
 
 /** react-virtuoso 在 components 为 undefined 或空列表时可能读 EmptyPlaceholder，用稳定对象兜底 */
 function EmptyList() {
@@ -16,6 +16,7 @@ export function ChatMessageList({
   isThinking,
   thinkingText,
   formatContent,
+  onQuestionnaireSubmit,
 }) {
   const lastIndex = messages.length - 1;
 
@@ -34,9 +35,10 @@ export function ChatMessageList({
         isThinking={isThinking}
         thinkingText={thinkingText}
         formatContent={formatContent}
+        onQuestionnaireSubmit={onQuestionnaireSubmit}
       />
     ),
-    [lastIndex, isLoading, isThinking, thinkingText, formatContent],
+    [lastIndex, isLoading, isThinking, thinkingText, formatContent, onQuestionnaireSubmit],
   );
 
   const computeItemKey = useCallback(
