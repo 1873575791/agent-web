@@ -1,5 +1,5 @@
 // server/server.js
-// 纯 JS 实现 — 完全移除 LangChain，使用 OpenAI SDK + 手写 ReAct 循环
+// 纯 JS 实现 — 无 LangChain、无 OpenAI SDK：fetch 流式 Chat Completions + 手写 ReAct
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';

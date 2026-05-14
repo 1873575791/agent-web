@@ -1,20 +1,110 @@
 // server/agent.js
-// 纯 JS ReAct Agent — 替代 LangChain 的 createReactAgent + ChatOpenAI
-// 核心思路：手写 ReAct 循环，通过 OpenAI SDK 的流式 API + function calling 实现
+// 从零实现的 ReAct Agent：仅用原生 fetch + ReadableStream，无 OpenAI SDK
+// 协议：OpenAI 兼容 Chat Completions（流式 SSE / NDJSON）
 
-import OpenAI from "openai";
 import { getToolDefinitions, executeTool } from "./tools/index.js";
 
 /**
- * 创建 OpenAI 客户端
- * @param {Object} config - { apiKey, baseURL, model }
- * @returns {OpenAI}
+ * 规范化 baseURL，请求路径为 /chat/completions
+ * @param {string} baseURL
  */
-function createClient(config) {
-  return new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
+function completionsUrl(baseURL) {
+  const trimmed = (baseURL || "").replace(/\/+$/, "");
+  return `${trimmed}/chat/completions`;
+}
+
+/**
+ * 按行解析 SSE：每行 `data: {...}` 或 `data: [DONE]`
+ * @param {ReadableStream<Uint8Array>} body
+ */
+async function* streamDataLines(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n");
+    buffer = parts.pop() ?? "";
+    for (const raw of parts) {
+      const line = raw.trim();
+      if (!line || line.startsWith(":")) continue;
+      if (line.startsWith("data:")) {
+        const payload = line.slice(5).trim();
+        if (payload) yield payload;
+      }
+    }
+  }
+  const tail = buffer.trim();
+  if (tail.startsWith("data:")) {
+    const payload = tail.slice(5).trim();
+    if (payload) yield payload;
+  }
+}
+
+/**
+ * 单次流式 Chat Completions 调用，产出解析后的 chunk 对象
+ * @param {Object} p
+ * @param {string} p.apiKey
+ * @param {string} p.baseURL
+ * @param {string} p.model
+ * @param {Array} p.messages
+ * @param {Array} [p.tools]
+ * @param {AbortSignal} [p.signal]
+ */
+async function* chatCompletionStreamChunks({
+  apiKey,
+  baseURL,
+  model,
+  messages,
+  tools,
+  signal,
+}) {
+  const url = completionsUrl(baseURL);
+  const body = {
+    model,
+    messages,
+    stream: true,
+    stream_options: { include_usage: true },
+    temperature: 0,
+  };
+  if (tools?.length) {
+    body.tools = tools;
+    body.tool_choice = "auto";
+  }
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+    signal,
   });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(
+      `Chat API ${res.status}: ${errText.slice(0, 500) || res.statusText}`
+    );
+  }
+
+  if (!res.body) {
+    throw new Error("响应无 body，无法流式读取");
+  }
+
+  for await (const payload of streamDataLines(res.body)) {
+    if (payload === "[DONE]") break;
+    let chunk;
+    try {
+      chunk = JSON.parse(payload);
+    } catch {
+      continue;
+    }
+    yield chunk;
+  }
 }
 
 /**
@@ -46,38 +136,38 @@ export async function runAgent({
   onUsage,
   maxIterations = 10,
 }) {
-  const client = createClient(config);
+  const { apiKey, baseURL, model } = config;
+  if (!apiKey || !baseURL || !model) {
+    throw new Error("缺少 apiKey、baseURL 或 model 配置");
+  }
+
   const toolDefs = getToolDefinitions();
 
-  // 构建完整的消息列表
   const allMessages = [
     { role: "system", content: systemPrompt },
     ...messages,
   ];
 
-  let totalUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  let totalUsage = {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+  };
 
   for (let i = 0; i < maxIterations; i++) {
-    // 调用 OpenAI Chat Completions API（流式）
-    const stream = await client.chat.completions.create({
-      model: config.model,
+    let assistantContent = "";
+    const toolCallsMap = new Map();
+
+    for await (const chunk of chatCompletionStreamChunks({
+      apiKey,
+      baseURL,
+      model,
       messages: allMessages,
       tools: toolDefs,
-      tool_choice: "auto",
-      stream: true,
-      stream_options: { include_usage: true },
-      temperature: 0,
-    });
-
-    // 收集本轮 LLM 的完整回复
-    let assistantContent = "";
-    const toolCallsMap = new Map(); // index -> { id, name, arguments }
-
-    for await (const chunk of stream) {
+    })) {
       const delta = chunk.choices?.[0]?.delta;
       const usage = chunk.usage;
 
-      // 收集 token 使用量（最后一个 chunk 包含 usage）
       if (usage) {
         totalUsage.prompt_tokens += usage.prompt_tokens || 0;
         totalUsage.completion_tokens += usage.completion_tokens || 0;
@@ -86,16 +176,14 @@ export async function runAgent({
 
       if (!delta) continue;
 
-      // 处理文本内容
       if (delta.content) {
         assistantContent += delta.content;
         onContent?.(delta.content);
       }
 
-      // 处理工具调用
       if (delta.tool_calls) {
         for (const tc of delta.tool_calls) {
-          const idx = tc.index;
+          const idx = tc.index ?? 0;
           if (!toolCallsMap.has(idx)) {
             toolCallsMap.set(idx, {
               id: tc.id || "",
@@ -111,14 +199,11 @@ export async function runAgent({
       }
     }
 
-    // 如果没有工具调用，本轮结束
     if (toolCallsMap.size === 0) {
-      // 将助手消息加入历史
       allMessages.push({ role: "assistant", content: assistantContent });
       break;
     }
 
-    // 构建助手消息（含 content + tool_calls）
     const assistantMessage = {
       role: "assistant",
       content: assistantContent || null,
@@ -133,36 +218,28 @@ export async function runAgent({
     };
     allMessages.push(assistantMessage);
 
-    // 依次执行每个工具调用
     for (const tc of toolCallsMap.values()) {
       let args = {};
       try {
-        args = JSON.parse(tc.arguments);
+        args = JSON.parse(tc.arguments || "{}");
       } catch {
         args = {};
       }
 
-      // 通知前端：工具调用开始
       onToolCall?.(tc.name, args);
 
-      // 执行工具
       const result = await executeTool(tc.name, args);
 
-      // 通知前端：工具调用结果
       onToolResult?.(tc.name, result);
 
-      // 将工具结果加入消息历史
       allMessages.push({
         role: "tool",
         tool_call_id: tc.id,
         content: typeof result === "string" ? result : JSON.stringify(result),
       });
     }
-
-    // 继续循环，让 LLM 基于工具结果生成回复
   }
 
-  // 发送最终 token 使用量
   if (totalUsage.total_tokens > 0) {
     onUsage?.({
       promptTokens: totalUsage.prompt_tokens,
