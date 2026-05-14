@@ -251,13 +251,21 @@
 // ========== 聊天区域 ==========
 .chat-container {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0; // flex 子项默认可无限撑高，不设 0 则内部 Virtuoso 拿不到可滚动高度
+  overflow: hidden;
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 
-  // 滚动条样式
+  // 欢迎页仍占满中间区域
+  > .welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  // 滚动条样式（Virtuoso 内部列表可滚动）
   &::-webkit-scrollbar {
     width: 6px;
   }
@@ -273,6 +281,43 @@
     &:hover {
       background: @text-secondary;
     }
+  }
+}
+
+// react-virtuoso 根节点：占满 chat-container 剩余高度
+.chat-virtuoso {
+  flex: 1;
+  min-height: 0;
+
+  // Virtuoso 内部 scroller 的滚动条
+  [data-virtuoso-scroller] {
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: @bg-tertiary;
+      border-radius: 3px;
+    }
+  }
+}
+
+// 每条消息一行：用户右对齐、助手左对齐（替代原 flex column gap）
+.virtuoso-msg-row {
+  display: flex;
+  width: 100%;
+  padding-bottom: 16px;
+  box-sizing: border-box;
+
+  &.user {
+    justify-content: flex-end;
+  }
+
+  &.agent,
+  &.error {
+    justify-content: flex-start;
   }
 }
 
@@ -786,6 +831,17 @@
   font-size: 15px;
   max-width: 400px;
   margin: 0 auto;
+}
+
+.chat-empty-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 15px;
+  color: @text-secondary;
 }
 
 // ========== 响应式 ==========
