@@ -258,25 +258,30 @@ export async function runAgent({
     };
     allMessages.push(assistantMessage);
 
-    // 依次执行工具并把结果写回上下文；下一轮 chatCompletionStreamChunks 会带上这些 tool 消息
-    for (const tc of toolCallsMap.values()) {
-      let args = {};
-      try {
-        args = JSON.parse(tc.arguments || "{}");
-      } catch {
-        args = {};
-      }
-
-      onToolCall?.(tc.name, args);
-
-      const result = await executeTool(tc.name, args);
-
-      onToolResult?.(tc.name, result);
-
+    // 同轮多工具并行执行，缩短总等待（结果仍按 tool_calls 顺序写入上下文）
+    const toolEntries = Array.from(toolCallsMap.values());
+    const parallelResults = await Promise.all(
+      toolEntries.map(async (tc) => {
+        let args = {};
+        try {
+          args = JSON.parse(tc.arguments || "{}");
+        } catch {
+          args = {};
+        }
+        onToolCall?.(tc.name, args);
+        const result = await executeTool(tc.name, args);
+        onToolResult?.(tc.name, result);
+        return {
+          tool_call_id: tc.id,
+          content: typeof result === "string" ? result : JSON.stringify(result),
+        };
+      }),
+    );
+    for (const row of parallelResults) {
       allMessages.push({
         role: "tool",
-        tool_call_id: tc.id,
-        content: typeof result === "string" ? result : JSON.stringify(result),
+        tool_call_id: row.tool_call_id,
+        content: row.content,
       });
     }
     // 未 break：进入外层下一轮 for，再次请求模型

@@ -3,7 +3,6 @@ import {
   addMessage,
   getAllMessages,
   clearAllMessages,
-  getChatHistory,
 } from "../utils/chatDB";
 import {
   fetchModels,
@@ -17,6 +16,31 @@ import {
   ChatMessageList,
 } from "./chat/index.js";
 import "./ChatAgent.less";
+
+/** 从当前界面状态构造发给后端的 history（含本条 user），避免每次全表读 IndexedDB */
+function buildChatHistoryForApi(prevMessages, currentUserText) {
+  const prior = prevMessages
+    .filter(
+      (m) =>
+        (m.type === "user" || m.type === "agent") &&
+        String(m.content || "").trim(),
+    )
+    .map((m) => ({
+      role: m.type === "user" ? "user" : "assistant",
+      content: m.content,
+    }));
+  const cleanedHistory = prior.filter((h, idx) => {
+    if (
+      h.role === "assistant" &&
+      idx === prior.length - 1 &&
+      !String(h.content || "").trim()
+    )
+      return false;
+    return true;
+  });
+  cleanedHistory.push({ role: "user", content: currentUserText });
+  return cleanedHistory;
+}
 
 function ChatAgent() {
   const [messages, setMessages] = useState([]);
@@ -160,16 +184,7 @@ function ChatAgent() {
     };
 
     try {
-      const history = await getChatHistory();
-      const cleanedHistory = history.filter((h, idx) => {
-        if (
-          h.role === "assistant" &&
-          idx === history.length - 1 &&
-          !h.content.trim()
-        )
-          return false;
-        return true;
-      });
+      const cleanedHistory = buildChatHistoryForApi(messages, message);
 
       const response = await postChat(
         {
@@ -189,8 +204,9 @@ function ChatAgent() {
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
+        buffer = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
         const lines = buffer.split("\n\n");
-        buffer = lines.pop();
+        buffer = lines.pop() ?? "";
 
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;

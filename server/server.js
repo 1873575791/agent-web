@@ -80,14 +80,22 @@ app.post('/api/chat', async (req, res) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    // 构建消息历史
+    // 构建消息历史（避免与 history 末条 user 重复追加，否则会加倍 token、拖慢首包与整段推理）
     const messages = [];
     if (history && Array.isArray(history)) {
       history.forEach(msg => {
         messages.push({ role: msg.role, content: msg.content });
       });
     }
-    messages.push({ role: "user", content: message });
+    const last = messages[messages.length - 1];
+    const lastAlreadyCurrentUser =
+      last &&
+      last.role === "user" &&
+      typeof last.content === "string" &&
+      last.content === message;
+    if (!lastAlreadyCurrentUser) {
+      messages.push({ role: "user", content: message });
+    }
 
     // 构建系统提示词
     const systemPrompt = buildSystemPrompt(tools);

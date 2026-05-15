@@ -1,5 +1,29 @@
 import { updateMessage } from "../../../utils/chatDB";
 
+/** 流式正文写入 IndexedDB 节流，避免每 token 一次写库阻塞主线程 */
+let agentContentFlushTimer = null;
+let pendingAgentContent = { id: null, content: "" };
+
+function scheduleAgentContentPersist(agentId, fullContent) {
+  pendingAgentContent = { id: agentId, content: fullContent };
+  if (agentContentFlushTimer) clearTimeout(agentContentFlushTimer);
+  agentContentFlushTimer = setTimeout(() => {
+    agentContentFlushTimer = null;
+    const { id, content } = pendingAgentContent;
+    if (id != null) void updateMessage(id, { content });
+  }, 200);
+}
+
+function flushAgentContentPersist() {
+  if (agentContentFlushTimer) {
+    clearTimeout(agentContentFlushTimer);
+    agentContentFlushTimer = null;
+  }
+  const { id, content } = pendingAgentContent;
+  if (id != null) void updateMessage(id, { content });
+  pendingAgentContent = { id: null, content: "" };
+}
+
 /** 处理单条 SSE JSON 事件（与 server 推送的 type 对齐） */
 export function handleChatStreamEvent(data, ctx) {
   const {
@@ -21,9 +45,7 @@ export function handleChatStreamEvent(data, ctx) {
           ...updated[last],
           content: updated[last].content + data.content,
         };
-        void updateMessage(updated[last].id, {
-          content: updated[last].content,
-        });
+        scheduleAgentContentPersist(updated[last].id, updated[last].content);
       }
       return updated;
     });
@@ -31,6 +53,7 @@ export function handleChatStreamEvent(data, ctx) {
   }
 
   if (data.type === "tool_call") {
+    flushAgentContentPersist();
     setIsThinking(true);
     setThinkingText(`正在调用 ${data.name}...`);
     setMessages((prev) => {
@@ -79,6 +102,7 @@ export function handleChatStreamEvent(data, ctx) {
   }
 
   if (data.type === "error") {
+    flushAgentContentPersist();
     setMessages((prev) => {
       const updated = [...prev];
       const last = updated.length - 1;
@@ -94,12 +118,14 @@ export function handleChatStreamEvent(data, ctx) {
   }
 
   if (data.type === "done") {
+    flushAgentContentPersist();
     setIsThinking(false);
     setThinkingText("");
     return;
   }
 
   if (data.type === "usage") {
+    flushAgentContentPersist();
     setLastUsage(data.usage);
     void loadBalances();
   }
