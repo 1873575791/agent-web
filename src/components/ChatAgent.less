@@ -251,13 +251,21 @@
 // ========== 聊天区域 ==========
 .chat-container {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0; // flex 子项默认可无限撑高，不设 0 则内部 Virtuoso 拿不到可滚动高度
+  overflow: hidden;
   padding: 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
 
-  // 滚动条样式
+  // 欢迎页仍占满中间区域
+  > .welcome {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  // 滚动条样式（Virtuoso 内部列表可滚动）
   &::-webkit-scrollbar {
     width: 6px;
   }
@@ -273,6 +281,43 @@
     &:hover {
       background: @text-secondary;
     }
+  }
+}
+
+// react-virtuoso 根节点：占满 chat-container 剩余高度
+.chat-virtuoso {
+  flex: 1;
+  min-height: 0;
+
+  // Virtuoso 内部 scroller 的滚动条
+  [data-virtuoso-scroller] {
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: @bg-tertiary;
+      border-radius: 3px;
+    }
+  }
+}
+
+// 每条消息一行：用户右对齐、助手左对齐（替代原 flex column gap）
+.virtuoso-msg-row {
+  display: flex;
+  width: 100%;
+  padding-bottom: 16px;
+  box-sizing: border-box;
+
+  &.user {
+    justify-content: flex-end;
+  }
+
+  &.agent,
+  &.error {
+    justify-content: flex-start;
   }
 }
 
@@ -786,6 +831,208 @@
   font-size: 15px;
   max-width: 400px;
   margin: 0 auto;
+}
+
+.chat-empty-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 15px;
+  color: @text-secondary;
+}
+
+// ========== 助手消息内：交互问卷卡片 ==========
+.message.agent .questionnaire-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: fade(@bg-primary, 55%);
+  border: 1px solid fade(@accent, 35%);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2);
+}
+
+.questionnaire-card-head {
+  margin-bottom: 12px;
+}
+
+.questionnaire-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: @text-primary;
+}
+
+.questionnaire-card-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: @text-secondary;
+  line-height: 1.5;
+}
+
+.questionnaire-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.questionnaire-field-label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: @text-primary;
+  margin-bottom: 8px;
+}
+
+.q-emoji {
+  font-size: 15px;
+}
+
+.questionnaire-required,
+.questionnaire-optional {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 4px;
+}
+
+.questionnaire-required {
+  background: fade(@warning, 22%);
+  color: @warning;
+}
+
+.questionnaire-optional {
+  background: fade(@text-secondary, 15%);
+  color: @text-secondary;
+}
+
+.questionnaire-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.questionnaire-chip {
+  border: 1px solid @bg-tertiary;
+  background: @bg-secondary;
+  color: @text-primary;
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: fade(@accent, 55%);
+    background: fade(@accent, 12%);
+  }
+
+  &.is-selected {
+    border-color: @accent;
+    background: fade(@accent, 22%);
+    color: #e0e7ff;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.questionnaire-textarea,
+.questionnaire-custom-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid @bg-tertiary;
+  background: @bg-secondary;
+  color: @text-primary;
+  font-size: 14px;
+  padding: 10px 12px;
+  font-family: inherit;
+  resize: vertical;
+
+  &::placeholder {
+    color: fade(@text-secondary, 75%);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: fade(@accent, 65%);
+    box-shadow: 0 0 0 2px fade(@accent, 18%);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+  }
+}
+
+.questionnaire-custom-input {
+  margin-top: 8px;
+  resize: none;
+}
+
+.questionnaire-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: @text-secondary;
+}
+
+.questionnaire-error {
+  margin-top: 10px;
+  font-size: 13px;
+  color: @error;
+}
+
+.questionnaire-submit {
+  margin-top: 14px;
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: @accent-gradient;
+  box-shadow: 0 4px 14px fade(@accent-dark, 45%);
+
+  &:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+}
+
+.questionnaire-card--done {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: @success;
+}
+
+.questionnaire-done-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: fade(@success, 22%);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 // ========== 响应式 ==========
