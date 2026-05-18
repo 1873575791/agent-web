@@ -2,12 +2,30 @@
 // 定义 AI Agent 的行为规范、工具使用策略和回答要求
 // 可独立维护和扩展，不需要修改主服务文件
 
+import { tokenBudgetConfig } from "../tokenBudget.js";
+
+const QUESTIONNAIRE_FULL = `**示例**（仅示意结构；实际请按用户场景改写 fields）：
+{"v":1,"title":"请告诉我你的需求","description":"点选或输入后点击下方按钮发送","submitLabel":"提交给助手","fields":[
+  {"id":"travel_days","label":"游玩天数","emoji":"🗓️","type":"choice","options":["1天","2天","3天","4天及以上"],"allowCustom":true,"placeholder":"如：3天2晚","required":true},
+  {"id":"companions","label":"同行情况","emoji":"👥","type":"choice","options":["独自","情侣","家庭（带老人/小孩）","朋友结伴"],"allowCustom":true,"placeholder":"可补充人数与关系","required":true},
+  {"id":"budget","label":"预算","emoji":"💰","type":"choice","options":["经济型","舒适型","豪华型"],"allowCustom":true,"placeholder":"可写具体预算","required":false},
+  {"id":"interests","label":"兴趣偏好","emoji":"🎯","type":"multi","options":["历史文化","美食探店","网红打卡","自然风光","购物逛街","亲子"],"allowCustom":true,"placeholder":"其他兴趣","required":false},
+  {"id":"departure","label":"出发城市","emoji":"🛫","type":"text","options":[],"allowCustom":false,"placeholder":"填写城市名","required":true},
+  {"id":"stay","label":"住宿偏好","emoji":"🏨","type":"choice","options":["市中心热闹","安静胡同/特色民宿","无特别要求"],"allowCustom":true,"placeholder":"可补充酒店档次或区域","required":false}
+]}`;
+
+const QUESTIONNAIRE_COMPACT =
+  "**示例**：单行 JSON，含 v:1、title、fields（id/label/type/options 等），按场景自拟字段。";
+
 /**
  * 构建系统提示词
  * @param {Array} tools - 当前注册的工具列表
+ * @param {{ compact?: boolean }} [options] - compact 默认读 AGENT_COMPACT_SYSTEM_PROMPT
  * @returns {string} 系统提示词
  */
-export function buildSystemPrompt(tools) {
+export function buildSystemPrompt(tools, options = {}) {
+  const compact =
+    options.compact ?? tokenBudgetConfig.compactSystemPrompt;
   // 从工具列表自动提取工具名和描述
   const toolDescriptions = tools
     .map((tool) => `- **${tool.name}**：${tool.description}`)
@@ -67,15 +85,7 @@ ${toolDescriptions}
   - allowCustom 为 true 时，表示用户除点选外还可**自行输入**补充（与选项可组合）
   - required 为 false 表示该项选填，缺省为 true
 
-**示例**（仅示意结构；实际请按用户场景改写 fields）：
-{"v":1,"title":"请告诉我你的需求","description":"点选或输入后点击下方按钮发送","submitLabel":"提交给助手","fields":[
-  {"id":"travel_days","label":"游玩天数","emoji":"🗓️","type":"choice","options":["1天","2天","3天","4天及以上"],"allowCustom":true,"placeholder":"如：3天2晚","required":true},
-  {"id":"companions","label":"同行情况","emoji":"👥","type":"choice","options":["独自","情侣","家庭（带老人/小孩）","朋友结伴"],"allowCustom":true,"placeholder":"可补充人数与关系","required":true},
-  {"id":"budget","label":"预算","emoji":"💰","type":"choice","options":["经济型","舒适型","豪华型"],"allowCustom":true,"placeholder":"可写具体预算","required":false},
-  {"id":"interests","label":"兴趣偏好","emoji":"🎯","type":"multi","options":["历史文化","美食探店","网红打卡","自然风光","购物逛街","亲子"],"allowCustom":true,"placeholder":"其他兴趣","required":false},
-  {"id":"departure","label":"出发城市","emoji":"🛫","type":"text","options":[],"allowCustom":false,"placeholder":"填写城市名","required":true},
-  {"id":"stay","label":"住宿偏好","emoji":"🏨","type":"choice","options":["市中心热闹","安静胡同/特色民宿","无特别要求"],"allowCustom":true,"placeholder":"可补充酒店档次或区域","required":false}
-]}
+${compact ? QUESTIONNAIRE_COMPACT : QUESTIONNAIRE_FULL}
 
 **注意**：该 JSON 代码块会被前端解析为**交互表单**（选项可点选，也可自填），请勿在 JSON 外再重复一份完全相同的机器字段列表；正文里仍应用自然语言 + Markdown 表格友好引导用户。`;
 }

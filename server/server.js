@@ -10,6 +10,7 @@ import axios from "axios";
 import { runAgent } from "./agent.js";
 import { tools } from "./tools/index.js";
 import { buildSystemPrompt } from "./skills/systemPrompt.js";
+import { trimChatHistory } from "./tokenBudget.js";
 
 dotenv.config();
 
@@ -83,8 +84,13 @@ app.post('/api/chat', async (req, res) => {
     // 构建消息历史（避免与 history 末条 user 重复追加，否则会加倍 token、拖慢首包与整段推理）
     const messages = [];
     if (history && Array.isArray(history)) {
-      history.forEach(msg => {
-        messages.push({ role: msg.role, content: msg.content });
+      history.forEach((msg) => {
+        const role = msg?.role;
+        if (role !== "user" && role !== "assistant") return;
+        const content =
+          typeof msg.content === "string" ? msg.content : String(msg.content ?? "");
+        if (!content.trim()) return;
+        messages.push({ role, content });
       });
     }
     const last = messages[messages.length - 1];
@@ -97,14 +103,23 @@ app.post('/api/chat', async (req, res) => {
       messages.push({ role: "user", content: message });
     }
 
+    const messagesForModel = trimChatHistory(messages);
+
     // 构建系统提示词
     const systemPrompt = buildSystemPrompt(tools);
+
+    if (process.env.DEBUG_AGENT) {
+      console.log("[AGENT] runAgent start", {
+        messageCount: messagesForModel.length,
+        model: config.model,
+      });
+    }
 
     // 使用纯 JS ReAct Agent
     await runAgent({
       config,
       systemPrompt,
-      messages,
+      messages: messagesForModel,
       onContent: (text) => {
         res.write(`data: ${JSON.stringify({ type: 'content', content: text })}\n\n`);
       },

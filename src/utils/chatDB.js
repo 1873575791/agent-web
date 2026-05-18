@@ -107,7 +107,7 @@ export async function clearAllMessages() {
 
 /**
  * 获取聊天历史（用于发送给模型）
- * 仅取 user 和 agent 类型的消息，转为 role/content 格式
+ * 仅取 user / agent，排除 model_switch 等系统提示
  * @returns {Promise<Array<{role: string, content: string}>>}
  */
 export async function getChatHistory() {

@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import { MESSAGE_TYPE } from "../lib/chatHistory.js";
 import { parseAgentQuestionnaire } from "../questionnaire/parseAgentQuestionnaire.js";
 import { QuestionnaireCard } from "../questionnaire/QuestionnaireCard.jsx";
 
@@ -19,11 +20,13 @@ export const MessageRow = memo(function MessageRow({
     isLoading &&
     isThinking &&
     index === lastIndex &&
-    msg.type === "agent";
+    msg.type === MESSAGE_TYPE.AGENT;
+
+  const isModelSwitch = msg.type === MESSAGE_TYPE.MODEL_SWITCH;
 
   const { markdown, spec } = useMemo(
     () =>
-      msg.type === "agent"
+      msg.type === MESSAGE_TYPE.AGENT
         ? parseAgentQuestionnaire(msg.content || "")
         : { markdown: msg.content || "", spec: null },
     [msg.type, msg.content],
@@ -33,11 +36,23 @@ export const MessageRow = memo(function MessageRow({
     ? `${msg.id}__${JSON.stringify(spec)}`
     : `${msg.id}__none`;
 
+  if (isModelSwitch) {
+    return (
+      <div className="virtuoso-msg-row model_switch">
+        <div className="message model_switch">
+          <div className="message-content model-switch-notice">
+            {msg.content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`virtuoso-msg-row ${msg.type}`}>
       <div className={`message ${msg.type}`}>
         <div className="message-avatar">
-          {msg.type === "user" ? "👤" : "🤖"}
+          {msg.type === MESSAGE_TYPE.USER ? "👤" : "🤖"}
         </div>
         <div className="message-content">
           {msg.steps && msg.steps.length > 0 && (
@@ -71,7 +86,7 @@ export const MessageRow = memo(function MessageRow({
             </div>
           )}
           {formatContent(markdown)}
-          {msg.type === "agent" && spec && onQuestionnaireSubmit ? (
+          {msg.type === MESSAGE_TYPE.AGENT && spec && onQuestionnaireSubmit ? (
             <QuestionnaireCard
               key={questionnaireKey}
               spec={spec}

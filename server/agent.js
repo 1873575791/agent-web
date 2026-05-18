@@ -8,6 +8,7 @@
 //   → 聚合 delta.content / delta.tool_calls → 无工具则结束；有工具则执行并写入 role:tool，再请求下一轮。
 
 import { getToolDefinitions, executeTool } from "./tools/index.js";
+import { trimToolResultForContext } from "./tokenBudget.js";
 
 // ---------- URL ----------
 
@@ -202,6 +203,7 @@ export async function runAgent({
       tools: toolDefs,
     })) {
       const delta = chunk.choices?.[0]?.delta;
+      console.log("delta", delta);
       const usage = chunk.usage;
 
       if (usage) {
@@ -271,9 +273,11 @@ export async function runAgent({
         onToolCall?.(tc.name, args);
         const result = await executeTool(tc.name, args);
         onToolResult?.(tc.name, result);
+        const raw =
+          typeof result === "string" ? result : JSON.stringify(result);
         return {
           tool_call_id: tc.id,
-          content: typeof result === "string" ? result : JSON.stringify(result),
+          content: trimToolResultForContext(raw),
         };
       }),
     );

@@ -265,22 +265,12 @@
     justify-content: center;
   }
 
-  // 滚动条样式（Virtuoso 内部列表可滚动）
+  // 仍可滚动，仅隐藏滚动条
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
   &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: @bg-tertiary;
-    border-radius: 3px;
-
-    &:hover {
-      background: @text-secondary;
-    }
+    display: none;
   }
 }
 
@@ -288,18 +278,20 @@
 .chat-virtuoso {
   flex: 1;
   min-height: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 
-  // Virtuoso 内部 scroller 的滚动条
+  &::-webkit-scrollbar {
+    display: none;
+  }
+
+  // Virtuoso 内部 scroller：隐藏滚动条
   [data-virtuoso-scroller] {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+
     &::-webkit-scrollbar {
-      width: 6px;
-    }
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    &::-webkit-scrollbar-thumb {
-      background: @bg-tertiary;
-      border-radius: 3px;
+      display: none;
     }
   }
 }
@@ -318,6 +310,10 @@
   &.agent,
   &.error {
     justify-content: flex-start;
+  }
+
+  &.model_switch {
+    justify-content: center;
   }
 }
 
@@ -357,6 +353,22 @@
     .message-content {
       background: rgba(239, 68, 68, 0.2);
       border: 1px solid @error;
+    }
+  }
+
+  &.model_switch {
+    max-width: 100%;
+    align-self: center;
+
+    .model-switch-notice {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      color: @text-secondary;
+      background: fade(@bg-tertiary, 60%);
+      border: 1px dashed @bg-tertiary;
+      border-radius: 10px;
+      padding: 8px 14px;
     }
   }
 }

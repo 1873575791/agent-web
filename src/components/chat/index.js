@@ -18,6 +18,12 @@ export {
 } from "./lib/api.js";
 export { QUICK_ACTIONS } from "./lib/quickActions.js";
 export { handleChatStreamEvent } from "./lib/streamHandler.js";
+export {
+  MESSAGE_TYPE,
+  isApiHistoryMessage,
+  normalizeStoredMessage,
+  buildChatHistoryForApi,
+} from "./lib/chatHistory.js";
 
 export { useMarkdownContent } from "./hooks/useMarkdownContent.jsx";
 

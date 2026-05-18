@@ -14,33 +14,11 @@ import {
   useMarkdownContent,
   ChatHeader,
   ChatMessageList,
+  buildChatHistoryForApi,
+  MESSAGE_TYPE,
+  normalizeStoredMessage,
 } from "./chat/index.js";
 import "./ChatAgent.less";
-
-/** 从当前界面状态构造发给后端的 history（含本条 user），避免每次全表读 IndexedDB */
-function buildChatHistoryForApi(prevMessages, currentUserText) {
-  const prior = prevMessages
-    .filter(
-      (m) =>
-        (m.type === "user" || m.type === "agent") &&
-        String(m.content || "").trim(),
-    )
-    .map((m) => ({
-      role: m.type === "user" ? "user" : "assistant",
-      content: m.content,
-    }));
-  const cleanedHistory = prior.filter((h, idx) => {
-    if (
-      h.role === "assistant" &&
-      idx === prior.length - 1 &&
-      !String(h.content || "").trim()
-    )
-      return false;
-    return true;
-  });
-  cleanedHistory.push({ role: "user", content: currentUserText });
-  return cleanedHistory;
-}
 
 function ChatAgent() {
   const [messages, setMessages] = useState([]);
@@ -74,12 +52,15 @@ function ChatAgent() {
       try {
         const saved = await getAllMessages();
         if (!alive || saved.length === 0) return;
-        const msgs = saved.map((s) => ({
-          id: s.id,
-          type: s.type,
-          content: s.content,
-          steps: s.steps || [],
-        }));
+        const msgs = saved.map((s) => {
+          const n = normalizeStoredMessage(s);
+          return {
+            id: n.id,
+            type: n.type,
+            content: n.content,
+            steps: n.steps || [],
+          };
+        });
         setMessages(msgs);
         setShowWelcome(false);
       } catch {
@@ -136,17 +117,35 @@ function ChatAgent() {
       if (data.success) {
         setCurrentModel(newModel);
         const content = `✅ ${data.message}`;
-        const id = await addMessage({ type: "agent", content });
-        setMessages((prev) => [...prev, { id, type: "agent", content }]);
+        const id = await addMessage({
+          type: MESSAGE_TYPE.MODEL_SWITCH,
+          content,
+        });
+        setMessages((prev) => [
+          ...prev,
+          { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
+        ]);
       } else {
-        const content = data.error || "切换模型失败";
-        const id = await addMessage({ type: "error", content });
-        setMessages((prev) => [...prev, { id, type: "error", content }]);
+        const content = `❌ ${data.error || "切换模型失败"}`;
+        const id = await addMessage({
+          type: MESSAGE_TYPE.MODEL_SWITCH,
+          content,
+        });
+        setMessages((prev) => [
+          ...prev,
+          { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
+        ]);
       }
     } catch {
-      const content = "切换模型失败，请稍后重试";
-      const id = await addMessage({ type: "error", content });
-      setMessages((prev) => [...prev, { id, type: "error", content }]);
+      const content = "❌ 切换模型失败，请稍后重试";
+      const id = await addMessage({
+        type: MESSAGE_TYPE.MODEL_SWITCH,
+        content,
+      });
+      setMessages((prev) => [
+        ...prev,
+        { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
+      ]);
     }
   };
 
