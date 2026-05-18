@@ -203,7 +203,6 @@ export async function runAgent({
       tools: toolDefs,
     })) {
       const delta = chunk.choices?.[0]?.delta;
-      console.log("delta", delta);
       const usage = chunk.usage;
 
       if (usage) {
