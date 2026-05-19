@@ -35,6 +35,14 @@ const MODEL_CONFIGS = {
     baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/v1",
     model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
   },
+  qwen: {
+    name: "通义千问",
+    apiKey: process.env.QWEN_API_KEY || process.env.DASHSCOPE_API_KEY,
+    baseURL:
+      process.env.QWEN_BASE_URL ||
+      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: process.env.QWEN_MODEL || "qwen-plus",
+  },
 };
 
 // 当前模型
@@ -226,6 +234,15 @@ app.get('/api/balance', async (req, res) => {
           balance: '-',
           message: '火山引擎请在控制台查看',
           consoleUrl: 'https://console.volcengine.com/ark'
+        };
+      }
+      // 通义千问 / 百炼 DashScope
+      else if (key === 'qwen') {
+        balances[key] = {
+          available: true,
+          balance: '-',
+          message: '请在阿里云百炼控制台查看',
+          consoleUrl: 'https://dashscope.console.aliyun.com/'
         };
       }
       else {

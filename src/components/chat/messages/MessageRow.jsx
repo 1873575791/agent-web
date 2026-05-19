@@ -22,8 +22,6 @@ export const MessageRow = memo(function MessageRow({
     index === lastIndex &&
     msg.type === MESSAGE_TYPE.AGENT;
 
-  const isModelSwitch = msg.type === MESSAGE_TYPE.MODEL_SWITCH;
-
   const { markdown, spec } = useMemo(
     () =>
       msg.type === MESSAGE_TYPE.AGENT
@@ -35,18 +33,6 @@ export const MessageRow = memo(function MessageRow({
   const questionnaireKey = spec
     ? `${msg.id}__${JSON.stringify(spec)}`
     : `${msg.id}__none`;
-
-  if (isModelSwitch) {
-    return (
-      <div className="virtuoso-msg-row model_switch">
-        <div className="message model_switch">
-          <div className="message-content model-switch-notice">
-            {msg.content}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className={`virtuoso-msg-row ${msg.type}`}>

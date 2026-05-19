@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import {
   addMessage,
   getAllMessages,
@@ -14,9 +14,10 @@ import {
   useMarkdownContent,
   ChatHeader,
   ChatMessageList,
+  ChatToast,
   buildChatHistoryForApi,
-  MESSAGE_TYPE,
-  normalizeStoredMessage,
+  filterMessagesForList,
+  useToast,
 } from "./chat/index.js";
 import "./ChatAgent.less";
 
@@ -35,6 +36,12 @@ function ChatAgent() {
   const chatAbortRef = useRef(null);
 
   const formatContent = useMarkdownContent();
+  const { toast, showToast, dismissToast } = useToast();
+
+  const listMessages = useMemo(
+    () => filterMessagesForList(messages),
+    [messages],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -51,18 +58,17 @@ function ChatAgent() {
 
       try {
         const saved = await getAllMessages();
-        if (!alive || saved.length === 0) return;
-        const msgs = saved.map((s) => {
-          const n = normalizeStoredMessage(s);
-          return {
-            id: n.id,
-            type: n.type,
-            content: n.content,
-            steps: n.steps || [],
-          };
-        });
-        setMessages(msgs);
-        setShowWelcome(false);
+        if (!alive) return;
+        if (saved.length > 0) {
+          const msgs = saved.map((s) => ({
+            id: s.id,
+            type: s.type,
+            content: s.content,
+            steps: s.steps || [],
+          }));
+          setMessages(msgs);
+          setShowWelcome(false);
+        }
       } catch {
         console.error("加载历史消息失败");
       }
@@ -116,36 +122,12 @@ function ChatAgent() {
       const data = await postSwitchModel(newModel);
       if (data.success) {
         setCurrentModel(newModel);
-        const content = `✅ ${data.message}`;
-        const id = await addMessage({
-          type: MESSAGE_TYPE.MODEL_SWITCH,
-          content,
-        });
-        setMessages((prev) => [
-          ...prev,
-          { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
-        ]);
+        showToast(data.message || "已切换模型", "success");
       } else {
-        const content = `❌ ${data.error || "切换模型失败"}`;
-        const id = await addMessage({
-          type: MESSAGE_TYPE.MODEL_SWITCH,
-          content,
-        });
-        setMessages((prev) => [
-          ...prev,
-          { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
-        ]);
+        showToast(data.error || "切换模型失败", "error");
       }
     } catch {
-      const content = "❌ 切换模型失败，请稍后重试";
-      const id = await addMessage({
-        type: MESSAGE_TYPE.MODEL_SWITCH,
-        content,
-      });
-      setMessages((prev) => [
-        ...prev,
-        { id, type: MESSAGE_TYPE.MODEL_SWITCH, content },
-      ]);
+      showToast("切换模型失败，请稍后重试", "error");
     }
   };
 
@@ -257,12 +239,13 @@ function ChatAgent() {
 
   return (
     <div className="chat-agent">
+      <ChatToast toast={toast} onDismiss={dismissToast} />
       <ChatHeader
         models={models}
         currentModel={currentModel}
         balances={balances}
         isLoading={isLoading}
-        messagesLength={messages.length}
+        messagesLength={listMessages.length}
         onSwitchModel={handleSwitchModel}
         onClearHistory={handleClearHistory}
       />
@@ -293,7 +276,7 @@ function ChatAgent() {
       </div>
 
       <ChatMessageList
-        messages={messages}
+        messages={listMessages}
         showWelcome={showWelcome}
         isLoading={isLoading}
         isThinking={isThinking}

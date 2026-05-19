@@ -16,18 +16,22 @@ export function isApiHistoryMessage(msg) {
 /** 旧数据：切换成功误存为 agent */
 const LEGACY_MODEL_SWITCH = /^✅\s*已切换到/;
 
-/**
- * 从 DB 读出后规范化 type（兼容历史脏数据）
- * @param {Object} record
- */
-export function normalizeStoredMessage(record) {
+/** 是否为「切换模型」类文案（不应出现在列表/API history） */
+export function isModelSwitchNotice(msg) {
+  if (msg?.type === MESSAGE_TYPE.MODEL_SWITCH) return true;
   if (
-    record.type === MESSAGE_TYPE.AGENT &&
-    LEGACY_MODEL_SWITCH.test(String(record.content || ""))
+    msg?.type === MESSAGE_TYPE.AGENT &&
+    LEGACY_MODEL_SWITCH.test(String(msg.content || ""))
   ) {
-    return { ...record, type: MESSAGE_TYPE.MODEL_SWITCH };
+    return true;
   }
-  return record;
+  return false;
+}
+
+/** 虚拟列表展示用：去掉切换提示等系统消息 */
+export function filterMessagesForList(messages) {
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((m) => !isModelSwitchNotice(m));
 }
 
 /**
@@ -39,7 +43,9 @@ export function buildChatHistoryForApi(prevMessages, currentUserText) {
   const prior = prevMessages
     .filter(
       (m) =>
-        isApiHistoryMessage(m) && String(m.content || "").trim(),
+        isApiHistoryMessage(m) &&
+        !isModelSwitchNotice(m) &&
+        String(m.content || "").trim(),
     )
     .map((m) => ({
       role: m.type === MESSAGE_TYPE.USER ? "user" : "assistant",

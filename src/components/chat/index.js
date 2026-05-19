@@ -21,9 +21,13 @@ export { handleChatStreamEvent } from "./lib/streamHandler.js";
 export {
   MESSAGE_TYPE,
   isApiHistoryMessage,
-  normalizeStoredMessage,
+  isModelSwitchNotice,
+  filterMessagesForList,
   buildChatHistoryForApi,
 } from "./lib/chatHistory.js";
+
+export { useToast } from "./hooks/useToast.js";
+export { ChatToast } from "./ui/ChatToast.jsx";
 
 export { useMarkdownContent } from "./hooks/useMarkdownContent.jsx";
 
