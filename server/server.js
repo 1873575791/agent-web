@@ -11,6 +11,7 @@ import { runAgent } from "./agent.js";
 import { tools } from "./tools/index.js";
 import { buildSystemPrompt } from "./skills/systemPrompt.js";
 import { trimChatHistory } from "./tokenBudget.js";
+import { recordUsage, getUsage } from "./tokenUsageTracker.js";
 
 dotenv.config();
 
@@ -146,6 +147,7 @@ app.post('/api/chat', async (req, res) => {
         })}\n\n`);
       },
       onUsage: (usage) => {
+        recordUsage(currentModelKey, usage);
         res.write(`data: ${JSON.stringify({ type: 'usage', usage })}\n\n`);
       },
     });
@@ -227,22 +229,31 @@ app.get('/api/balance', async (req, res) => {
           balances[key] = { available: false, balance: 0, message: '账户不可用' };
         }
       }
-      // 豆包/火山引擎 - 暂不支持余额查询 API
+      // 豆包/火山引擎 - 暂不支持余额查询 API，显示已用 token
       else if (key === 'doubao') {
+        const usage = getUsage(key);
+        const totalUsed = usage?.totalTokens || 0;
         balances[key] = {
           available: true,
-          balance: '-',
+          balance: totalUsed > 0
+            ? `已用 ${totalUsed.toLocaleString()} tokens`
+            : '-',
           message: '火山引擎请在控制台查看',
           consoleUrl: 'https://console.volcengine.com/ark'
         };
       }
-      // 通义千问 / 百炼 DashScope
+      // 通义千问 / 百炼 DashScope — 无余额 API，显示已用 token
       else if (key === 'qwen') {
+        const usage = getUsage(key);
+        const totalUsed = usage?.totalTokens || 0;
         balances[key] = {
           available: true,
-          balance: '-',
-          message: '请在阿里云百炼控制台查看',
-          consoleUrl: 'https://dashscope.console.aliyun.com/'
+          balance: totalUsed > 0
+            ? `已用 ${totalUsed.toLocaleString()} tokens`
+            : '免费额度',
+          message: '百炼控制台查看剩余',
+          consoleUrl: 'https://dashscope.console.aliyun.com/',
+          tokenUsage: usage,
         };
       }
       else {

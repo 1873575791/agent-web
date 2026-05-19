@@ -13,34 +13,44 @@ export function ChatHeader({
       <h1 className="header-title">AI Agent 助手</h1>
       <div className="header-status">
         <div className="balance-display">
-          {balances[currentModel] && (
-            <div className="balance-item active">
-              <span className="balance-label">
-                {models.find((m) => m.key === currentModel)?.name ||
-                  currentModel}
-                :
-              </span>
-              <span
-                className={`balance-value ${balances[currentModel].available ? "" : "unavailable"}`}
+          {balances[currentModel] && (() => {
+            const b = balances[currentModel];
+            const modelName =
+              models.find((m) => m.key === currentModel)?.name || currentModel;
+            const inner = (
+              <>
+                <span className="balance-label">{modelName}:</span>
+                <span className={`balance-value ${b.available ? "" : "unavailable"}`}>
+                  {b.available ? (
+                    <>
+                      {b.balance}
+                      {b.currency && (
+                        <span className="balance-currency"> {b.currency}</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="balance-message">
+                      {b.message || "不可用"}
+                    </span>
+                  )}
+                </span>
+              </>
+            );
+
+            return b.consoleUrl ? (
+              <a
+                className="balance-item active balance-link"
+                href={b.consoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={b.message || "查看详情"}
               >
-                {balances[currentModel].available ? (
-                  <>
-                    {balances[currentModel].balance}
-                    {balances[currentModel].currency && (
-                      <span className="balance-currency">
-                        {" "}
-                        {balances[currentModel].currency}
-                      </span>
-                    )}
-                  </>
-                ) : (
-                  <span className="balance-message">
-                    {balances[currentModel].message || "不可用"}
-                  </span>
-                )}
-              </span>
-            </div>
-          )}
+                {inner}
+              </a>
+            ) : (
+              <div className="balance-item active">{inner}</div>
+            );
+          })()}
         </div>
         <div className="model-selector">
           <label>模型：</label>

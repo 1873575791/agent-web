@@ -15,6 +15,9 @@ dist-ssr
 # Environment variables
 .env
 
+# Token usage tracking
+.token-usage.json
+
 # Release artifacts
 *.tar.gz
 release_notes.md
