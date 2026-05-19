@@ -1,7 +1,37 @@
-/** 与系统提示约定的机器可读问卷块：```agent-questionnaire ... ``` */
+/**
+ * 从 agent 回复中提取问卷 JSON。
+ *
+ * 兼容多种模型输出变体：
+ *   1. ```agent-questionnaire\n{...}```   —— 标准格式
+ *   2. ```json\n{...}``` / ```\n{...}```  —— 千问等模型常用；需 JSON 含 v:1 + fields
+ *   3. 无代码围栏的裸 JSON 对象            —— 少数模型直接输出 JSON
+ */
 
-const FENCE_RE =
+/** 优先：精确语言标记 */
+const FENCE_EXACT_RE =
   /```agent-questionnaire\s*\n([\s\S]*?)```(?:\s*\n)?/i;
+
+/** 回退：json / 空语言标记的代码围栏 */
+const FENCE_GENERIC_RE =
+  /```(?:json)?\s*\n([\s\S]*?)```(?:\s*\n)?/gi;
+
+/** 最终兜底：文本中嵌入的 {..."v":1..."fields":...} 裸 JSON */
+const BARE_JSON_RE = /\{[\s\S]*?"v"\s*:\s*1[\s\S]*?"fields"\s*:\s*\[[\s\S]*?\][\s\S]*?\}/g;
+
+/**
+ * 尝试将字符串解析为问卷 spec；非问卷 JSON 返回 null。
+ * @param {string} raw
+ * @returns {import('./questionnaireTypes').AgentQuestionnaireSpec | null}
+ */
+function tryParseSpec(raw) {
+  let parsed;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    return null;
+  }
+  return normalizeQuestionnaireSpec(parsed);
+}
 
 /**
  * 从完整消息正文中拆出 Markdown 与问卷 JSON。
@@ -13,24 +43,38 @@ export function parseAgentQuestionnaire(content) {
     return { markdown: content || "", spec: null };
   }
 
-  const m = content.match(FENCE_RE);
-  if (!m) {
-    return { markdown: content, spec: null };
+  // —— 1. 精确匹配 agent-questionnaire 围栏 ——
+  const exact = content.match(FENCE_EXACT_RE);
+  if (exact) {
+    const spec = tryParseSpec(exact[1]);
+    if (spec) {
+      return { markdown: content.slice(0, exact.index).trimEnd(), spec };
+    }
   }
 
-  let parsed;
-  try {
-    parsed = JSON.parse(m[1].trim());
-  } catch {
-    return { markdown: content, spec: null };
+  // —— 2. 回退：```json 或 ``` 围栏中寻找含 v:1+fields 的 JSON ——
+  let genericMatch;
+  FENCE_GENERIC_RE.lastIndex = 0;
+  while ((genericMatch = FENCE_GENERIC_RE.exec(content)) !== null) {
+    const body = genericMatch[1];
+    if (!/\bfields\b/.test(body)) continue;
+    const spec = tryParseSpec(body);
+    if (spec) {
+      return { markdown: content.slice(0, genericMatch.index).trimEnd(), spec };
+    }
   }
 
-  const spec = normalizeQuestionnaireSpec(parsed);
-  const markdown = spec
-    ? content.slice(0, m.index).trimEnd()
-    : content;
+  // —— 3. 兜底：裸 JSON 对象 ——
+  let bareMatch;
+  BARE_JSON_RE.lastIndex = 0;
+  while ((bareMatch = BARE_JSON_RE.exec(content)) !== null) {
+    const spec = tryParseSpec(bareMatch[0]);
+    if (spec) {
+      return { markdown: content.slice(0, bareMatch.index).trimEnd(), spec };
+    }
+  }
 
-  return { markdown, spec };
+  return { markdown: content, spec: null };
 }
 
 /**

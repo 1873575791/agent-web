@@ -301,8 +301,43 @@ const financialReportTool = {
   }
 };
 
+// 交互问卷工具 — 前端渲染为可交互表单，服务端拦截后转为正文输出
+const questionnaireTool = {
+  name: "agent_questionnaire",
+  description: "向用户展示一份可交互的结构化问卷表单（支持单选、多选、文本输入）。当你需要一次性收集用户多项信息（如旅行定制、需求调研、偏好配置等）时，调用此工具。前端会将 JSON 渲染为可点选的卡片，用户填完后自动提交。",
+  parameters: {
+    type: "object",
+    properties: {
+      v: { type: "number", description: "固定为 1" },
+      title: { type: "string", description: "问卷卡片标题，如「请告诉我你的需求」" },
+      description: { type: "string", description: "可选，简短说明" },
+      submitLabel: { type: "string", description: "可选，提交按钮文案，默认「提交给助手」" },
+      fields: {
+        type: "array",
+        description: "问卷字段数组",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "字段唯一标识，英文蛇形命名" },
+            label: { type: "string", description: "用户可见的中文标签" },
+            emoji: { type: "string", description: "可选，字段前的 emoji 图标" },
+            type: { type: "string", enum: ["choice", "multi", "text"], description: "choice 单选、multi 多选、text 纯文本" },
+            options: { type: "array", items: { type: "string" }, description: "选项列表（choice/multi 时使用）" },
+            allowCustom: { type: "boolean", description: "是否允许用户自行输入补充" },
+            placeholder: { type: "string", description: "输入框占位文字" },
+            required: { type: "boolean", description: "是否必填，默认 true" }
+          },
+          required: ["id", "label", "type"]
+        }
+      }
+    },
+    required: ["v", "fields"]
+  },
+  execute: async () => "问卷已展示给用户"
+};
+
 // ========== 工具注册 ==========
-const tools = [calculatorTool, weatherTool, trainTicketTool, newsTool, financialReportTool];
+const tools = [calculatorTool, weatherTool, trainTicketTool, newsTool, financialReportTool, questionnaireTool];
 
 // 转换为 OpenAI function calling 格式
 function getToolDefinitions() {

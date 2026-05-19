@@ -50,23 +50,43 @@ export const MessageRow = memo(function MessageRow({
                     key={`${step.name}-${j}-${step.status}`}
                     className={`tool-step ${step.status === "running" ? "running" : "done"}`}
                   >
-                    <span className="tool-step-icon">
-                      {step.status === "running" ? "⏳" : "✅"}
-                    </span>
-                    <span>调用</span>
-                    <span className="tool-step-name">{step.name}</span>
-                    {step.args && Object.keys(step.args).length > 0 && (
-                      <span>
-                        (
-                        {Object.entries(step.args)
-                          .map(([k, v]) => `${k}: ${v}`)
-                          .join(", ")}
-                        )
-                      </span>
-                    )}
-                    {step.status === "running" && (
-                      <span className="tool-step-status">执行中...</span>
-                    )}
+                    {(() => {
+                      const isQ = /^agent[-_]?questionnaire$/i.test(step.name);
+                      return (
+                        <>
+                          <span className="tool-step-icon">
+                            {step.status === "running" ? "⏳" : "✅"}
+                          </span>
+                          {isQ ? (
+                            <>
+                              <span>{step.status === "running" ? "生成交互问卷" : "问卷已生成"}</span>
+                              {step.args?.title && (
+                                <span className="tool-step-name">{step.args.title}</span>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <span>调用</span>
+                              <span className="tool-step-name">{step.name}</span>
+                              {step.args && Object.keys(step.args).length > 0 && (
+                                <span>
+                                  (
+                                  {Object.entries(step.args)
+                                    .map(([k, v]) => `${k}: ${v}`)
+                                    .join(", ")}
+                                  )
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {step.status === "running" && (
+                            <span className="tool-step-status">
+                              {isQ ? "生成中..." : "执行中..."}
+                            </span>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
             </div>

@@ -55,7 +55,10 @@ export function handleChatStreamEvent(data, ctx) {
   if (data.type === "tool_call") {
     flushAgentContentPersist();
     setIsThinking(true);
-    setThinkingText(`正在调用 ${data.name}...`);
+    const isQuestionnaire = /^agent[-_]?questionnaire$/i.test(data.name);
+    setThinkingText(
+      isQuestionnaire ? "正在生成交互问卷..." : `正在调用 ${data.name}...`,
+    );
     setMessages((prev) => {
       const updated = [...prev];
       const last = updated.length - 1;

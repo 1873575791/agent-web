@@ -72,20 +72,17 @@ ${toolDescriptions}
 **何时可弱化**：纯寒暄、致谢、或用户明确要求「只要一句话/不要延伸」时，可不单独起「延伸推荐」标题；若仍有一点价值，可在主文末用一两句轻量补充即可。
 
 ## 交互问卷（向用户收集多维度信息时）
-当你需要用户一次性补充**多项结构化信息**（如行程定制、需求调研、分步配置等），在**人类可读的说明与表格之后**，追加**唯一一个** Markdown 代码块：
-- 第一行必须为三个反引号 + 语言标记 **agent-questionnaire**（全小写），换行后是 JSON，再以三个反引号结束。
-- JSON 结构（字段 id 用英文蛇形命名；label 为用户可见中文）：
-  - v 固定为 1
-  - title：卡片标题，如「请告诉我你的需求」
-  - description：可选的简短说明
-  - submitLabel：可选，提交按钮文案，默认由前端处理
-  - fields 数组，每项含：id, label, 可选 emoji, type, options, allowCustom, placeholder, required
-  - type 取值：choice（单选）、multi（多选）、text（纯文本）
-  - options 为字符串数组；有选项时配合 choice 或 multi；无选项的 text 用于开放填写
-  - allowCustom 为 true 时，表示用户除点选外还可**自行输入**补充（与选项可组合）
-  - required 为 false 表示该项选填，缺省为 true
+当你需要用户一次性补充**多项结构化信息**（如行程定制、需求调研、分步配置等），**必须调用 \`agent_questionnaire\` 工具**。前端会自动将其渲染为可点选、可填写的交互式卡片。
 
-${compact ? QUESTIONNAIRE_COMPACT : QUESTIONNAIRE_FULL}
+**使用方式**：直接通过 tool_call 调用 \`agent_questionnaire\`，传入问卷 JSON 作为参数即可。
+- v 固定为 1
+- title：卡片标题
+- fields 数组，每项含：id（英文蛇形命名）、label（用户可见中文）、可选 emoji、type、options、allowCustom、placeholder、required
+- type 取值：choice（单选）、multi（多选）、text（纯文本）
 
-**注意**：该 JSON 代码块会被前端解析为**交互表单**（选项可点选，也可自填），请勿在 JSON 外再重复一份完全相同的机器字段列表；正文里仍应用自然语言 + Markdown 表格友好引导用户。`;
+**严格要求**：
+- **禁止**用自然语言列出问题让用户手动回复，**必须**调用 agent_questionnaire 工具
+- **禁止**说"当前环境不支持"——环境完全支持此工具
+- 调用工具前可以用一两句话引导用户，但问卷本身**只能**通过工具调用传递
+- 工具调用成功后，**不要**再用文本重复问卷内容`;
 }

@@ -269,6 +269,25 @@ export async function runAgent({
         } catch {
           args = {};
         }
+
+        // 拦截 agent-questionnaire 伪工具：某些模型（如千问）会把问卷当 tool_call 发送
+        if (/^agent[-_]?questionnaire$/i.test(tc.name)) {
+          onToolCall?.("agent_questionnaire", {
+            title: args.title || "交互问卷",
+          });
+          const fenced =
+            "\n\n```agent-questionnaire\n" +
+            JSON.stringify(args, null, 2) +
+            "\n```\n";
+          assistantContent += fenced;
+          onContent?.(fenced);
+          onToolResult?.("agent_questionnaire", "问卷已生成");
+          return {
+            tool_call_id: tc.id,
+            content: "问卷已展示给用户，请等待用户填写后提交。不要再用自然语言重复问卷内容。",
+          };
+        }
+
         onToolCall?.(tc.name, args);
         const result = await executeTool(tc.name, args);
         onToolResult?.(tc.name, result);
